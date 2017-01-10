@@ -1,12 +1,10 @@
-const antidoteClient = require('antidote_ts_client')
+const kv = require('./db/kv')
 const entities = require('./entities/entity')
 
 // number -> string -> {} -> connection
 function make(port, url, opts = {}) {
     // TODO: Separate connection into a separate object to track indices?
-    const conn = antidoteClient.connect(port, url)
-    const bucket = opts.bucket || conn.defaultBucket
-    return Object.assign(conn, {defaultBucket: bucket})
+    return kv.createRemote(port, url, opts)
 }
 
 // connection -> promise connection
