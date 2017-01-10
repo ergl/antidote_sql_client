@@ -136,16 +136,19 @@ function entityRef(conn, entity) {
     return Array.isArray(entity) ? entity.map(e => conn.register(e.id)) : conn.register(entity.id)
 }
 
-// connection -> register | [register] -> string | [string] -> promise (any | [any])
-function _get(conn, refs, field = []) {
-    const read_fields = (value, index) => entities.readField(value, field[index])
-    const result = conn.readBatch(refs)
-        .then(values => values.map(read_fields))
+// connection -> string | [string] -> string | [string] -> promise (any | [any])
+function _get(conn, keys, field = []) {
+    const read_fields = function(values) {
+        return values.map((v, idx) => entities.readField(v, field[idx]))
+    }
+
+    const result = kv.get(conn, keys)
+        .then(read_fields)
         .catch(err => {
             console.error("_get failed with", err)
             return [undefined]
         })
-    return refs.length !== 1 ? result : result.then(r => r[0])
+    return keys.length !== 1 ? result : result.then(r => r[0])
 }
 
 // connection -> entity | [entity] -> string | [string] -> promise (any | [any])
@@ -155,8 +158,8 @@ function _get(conn, refs, field = []) {
 // Warning: it is not expected that someone will store `undefined` as an object in the database.
 function get(conn, entity, field = []) {
     const to_read = Array.isArray(entity) ? entity : [entity]
-    const refs = entityRef(conn, to_read)
-    return _get(conn, refs, field)
+    const keys = to_read.map(e => e.id)
+    return getKeys(conn, keys, field)
 }
 
 // connection -> string | [string] -> string | [string] -> promise (any | [any])
@@ -166,9 +169,7 @@ function get(conn, entity, field = []) {
 // Warning: it is not expected that someone will store `undefined` as an object in the database,
 // if the user does, then there is no guarantee that this function will work.
 function getKeys(conn, keys, field = []) {
-    const to_read = Array.isArray(keys) ? keys : [keys]
-    const refs = to_read.map(k => conn.register(k))
-    return _get(conn, refs, field)
+    return _get(conn, keys, field)
 }
 
 module.exports = {
