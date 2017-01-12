@@ -1,8 +1,12 @@
 const kv = require('./kv')
 const keyEncoding = require('./keyEncoding')
 
-function createMeta(remote, table_name) {
-    const ops = generateMetaOps(remote, table_name)
+function createMeta(remote, table_name, schema) {
+    const ops = generateMetaOps(remote, table_name, {
+        increment: 0,
+        indices: [],
+        schema: schema
+    })
     return remote.update(ops)
 }
 
@@ -17,7 +21,8 @@ function getNextKey(remote, table_name) {
 function incrKey(remote, table_name) {
     return remote.update(generateMetaOps(remote, table_name, {
         increment: 1,
-        indices: 'no_set'
+        indices: 'no_set',
+        schema: 'no_set'
     }))
 }
 
@@ -68,7 +73,8 @@ function getIndices(remote, table_name) {
 function setIndex(remote, table_name, indices = 'no_set') {
     return remote.update(generateMetaOps(remote, table_name, {
         increment: 0,
-        indices: indices
+        indices: indices,
+        schema: 'no_set'
     }))
 }
 
@@ -111,22 +117,27 @@ function indexOfField(remote, table_name, indexed_field) {
     })
 }
 
-function generateMetaOps(remote, table_name, opts = {increment: 0, indices: []}) {
+function generateMetaOps(remote, table_name, opts = {increment: 0, indices: [], schema: []}) {
     const inc = opts.increment || 0
     const index_tuples = opts.indices || []
+    const schema_list = opts.schema || []
 
     const meta_ref = generateMetaRef(remote, table_name)
     const keyrange = meta_ref.counter(keyEncoding.encodeMetaCounter(table_name))
     const indices = meta_ref.register(keyEncoding.encodeMetaIndex(table_name))
+    const schema = meta_ref.register(keyEncoding.encodeMetaSchema(table_name))
 
-    if (index_tuples === 'no_set') {
-        return [keyrange.increment(inc)]
+    const ops = [keyrange.increment(inc)]
+
+    if (index_tuples !== 'no_set') {
+        ops.push(indices.set(index_tuples))
     }
 
-    return [
-        keyrange.increment(inc),
-        indices.set(index_tuples)
-    ]
+    if (schema !== 'no_set') {
+        ops.push(schema.set(schema_list))
+    }
+
+    return ops
 }
 
 function generateMetaRef(remote, table_name) {
