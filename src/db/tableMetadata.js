@@ -33,6 +33,30 @@ function incrAndGetKey(remote, table_name, {in_tx} = {in_tx: true}) {
     return runnable(remote)
 }
 
+function getNextIndexKey(remote, table_name, index_name) {
+    const ref = generateIndexRef(remote, table_name, index_name)
+    return ref.read()
+}
+
+function incrIndexKey(remote, table_name, index_name) {
+    const ref = generateIndexRef(remote, table_name, index_name)
+    return remote.update(ref.increment(1))
+}
+
+function incrAndGetIndexKey(remote, table_name, index_name, {in_tx} = {in_tx: true}) {
+    const runnable = tx => {
+        return incrIndexKey(tx, table_name, index_name).then(_ => {
+            return getNextIndexKey(tx, table_name, index_name)
+        })
+    }
+
+    if (in_tx) {
+        return kv.runT(remote, runnable).then(({result}) => result)
+    }
+
+    return runnable(remote)
+}
+
 function getIndices(remote, table_name) {
     const meta_ref = generateMetaRef(remote, table_name)
     const index_key = keyEncoding.encodeMetaIndex(table_name)
@@ -109,11 +133,15 @@ function generateMetaRef(remote, table_name) {
     return remote.map(keyEncoding.encodeMeta(table_name))
 }
 
+function generateIndexRef(remote, table_name, index_name) {
+    return remote.counter(keyEncoding.encodeIndex(table_name, index_name))
+}
+
 module.exports = {
     createMeta,
     incrAndGetKey,
-    getNextKey,
+    incrAndGetIndexKey,
+
     addIndex,
-    indexOfField,
-    fieldIndexed
+    indexOfField
 }

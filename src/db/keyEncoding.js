@@ -264,6 +264,7 @@ function decode(key) {
 module.exports = {
     decode,
     encode,
+    encodeIndex,
     encodeMeta,
     encodeMetaIndex,
     encodeMetaCounter
