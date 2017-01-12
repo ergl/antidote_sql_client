@@ -131,6 +131,12 @@ function getSchema(remote, table_name) {
     })
 }
 
+function validateSchema(remote, table_name, schema) {
+    return getSchema(remote, table_name).then(sch => {
+        return schema.every(f => sch.includes(f))
+    })
+}
+
 function generateMetaOps(remote, table_name, opts = {increment: 0, indices: [], schema: []}) {
     const inc = opts.increment || 0
     const index_tuples = opts.indices || []
@@ -164,6 +170,8 @@ function generateIndexRef(remote, table_name, index_name) {
 
 module.exports = {
     createMeta,
+    validateSchema,
+
     incrAndGetKey,
     incrAndGetIndexKey,
 
