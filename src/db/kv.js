@@ -49,5 +49,7 @@ function generateRef(remote, key) {
 module.exports = {
     createRemote,
     closeRemote,
-    get
+    runT,
+    get,
+    put
 }
