@@ -80,8 +80,14 @@ function setIndex(remote, table_name, indices = 'no_set') {
 
 function addIndex(remote, table_name, mapping, {in_tx} = {in_tx: true}) {
     const runnable = tx => {
-        return getIndices(tx, table_name).then(index_table => {
-            return setIndex(tx, table_name, index_table.concat(mapping))
+        return getSchema(remote, table_name).then(schema => {
+            if (!schema.includes(mapping.field)) {
+                throw "Can't add index on non-existent field"
+            }
+
+            return getIndices(tx, table_name).then(index_table => {
+                return setIndex(tx, table_name, index_table.concat(mapping))
+            })
         })
     }
 
@@ -114,6 +120,14 @@ function indexOfField(remote, table_name, indexed_field) {
             return acc
         }, [])
         return index.length === 0 ? index[0] : index
+    })
+}
+
+function getSchema(remote, table_name) {
+    const meta_ref = generateMetaRef(remote, table_name)
+    const schema_key = keyEncoding.encodeMetaSchema(table_name)
+    return meta_ref.read().then(meta_values => {
+        return meta_values.registerValue(schema_key)
     })
 }
 
