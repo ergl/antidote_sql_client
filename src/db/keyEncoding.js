@@ -288,6 +288,8 @@ function decode(key) {
 module.exports = {
     decode,
     encode,
+    encodePrimary,
+    encodeField,
     encodeIndex,
     encodeMeta,
     encodeMetaIndex,

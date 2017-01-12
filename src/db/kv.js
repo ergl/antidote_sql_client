@@ -18,6 +18,7 @@ function commitT(remote) {
     return remote.commit()
 }
 
+// TODO: Option to skip result
 function runT(remote, fn) {
     const runnable = tx => {
         return fn(tx).then(v => commitT(tx).then(ct => ({ct, result: v})))
@@ -51,5 +52,6 @@ module.exports = {
     closeRemote,
     runT,
     get,
-    put
+    put,
+    putPar
 }
