@@ -135,7 +135,7 @@ function getSchema(remote, table_name) {
 
 function validateSchema(remote, table_name, schema) {
     return getSchema(remote, table_name).then(sch => {
-        return schema.every(f => sch.includes(f))
+        return sch.every(f => schema.includes(f))
     })
 }
 
