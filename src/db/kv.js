@@ -18,10 +18,18 @@ function commitT(remote) {
     return remote.commit()
 }
 
-// TODO: Option to skip result
-function runT(remote, fn) {
+function runT(remote, fn, {ignore_ct} = {ignore_ct: true}) {
     const runnable = tx => {
-        return fn(tx).then(v => commitT(tx).then(ct => ({ct, result: v})))
+        return fn(tx).then(v => commitT(tx).then(ct => {
+            if (ignore_ct) {
+                return v
+            }
+
+            return {
+                ct: ct,
+                result: v
+            }
+        }))
     }
     return startT(remote).then(runnable)
 }

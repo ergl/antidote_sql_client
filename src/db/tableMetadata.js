@@ -32,7 +32,7 @@ function incrAndGetKey(remote, table_name, {in_tx} = {in_tx: true}) {
     }
 
     if (in_tx) {
-        return kv.runT(remote, runnable).then(({result}) => result)
+        return kv.runT(remote, runnable)
     }
 
     return runnable(remote)
@@ -56,7 +56,7 @@ function incrAndGetIndexKey(remote, table_name, index_name, {in_tx} = {in_tx: tr
     }
 
     if (in_tx) {
-        return kv.runT(remote, runnable).then(({result}) => result)
+        return kv.runT(remote, runnable)
     }
 
     return runnable(remote)
