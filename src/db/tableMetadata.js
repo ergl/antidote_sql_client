@@ -5,7 +5,7 @@ function createMeta(remote, table_name, schema) {
     const ops = generateMetaOps(remote, table_name, {
         increment: 0,
         indices: [],
-        schema: schema
+        schema
     })
     return remote.update(ops)
 }
@@ -19,11 +19,7 @@ function getNextKey(remote, table_name) {
 }
 
 function incrKey(remote, table_name) {
-    return remote.update(generateMetaOps(remote, table_name, {
-        increment: 1,
-        indices: 'no_set',
-        schema: 'no_set'
-    }))
+    return remote.update(generateMetaOps(remote, table_name, { increment: 1 }))
 }
 
 function incrAndGetKey(remote, table_name, {in_tx} = {in_tx: true}) {
@@ -71,11 +67,7 @@ function getIndices(remote, table_name) {
 }
 
 function setIndex(remote, table_name, indices = 'no_set') {
-    return remote.update(generateMetaOps(remote, table_name, {
-        increment: 0,
-        indices: indices,
-        schema: 'no_set'
-    }))
+    return remote.update(generateMetaOps(remote, table_name, { indices: indices }))
 }
 
 function addIndex(remote, table_name, mapping, {in_tx} = {in_tx: true}) {
@@ -145,10 +137,10 @@ function validateSchemaSubset(remote, table_name, fields) {
     })
 }
 
-function generateMetaOps(remote, table_name, opts = {increment: 0, indices: [], schema: []}) {
+function generateMetaOps(remote, table_name, opts) {
     const inc = opts.increment || 0
-    const index_tuples = opts.indices || []
-    const schema_list = opts.schema || []
+    const index_tuples = opts.indices || null
+    const schema_list = opts.schema || null
 
     const meta_ref = generateMetaRef(remote, table_name)
     const keyrange = meta_ref.counter(keyEncoding.encodeMetaCounter(table_name))
@@ -157,11 +149,11 @@ function generateMetaOps(remote, table_name, opts = {increment: 0, indices: [], 
 
     const ops = [keyrange.increment(inc)]
 
-    if (index_tuples !== 'no_set') {
+    if (index_tuples !== null) {
         ops.push(indices.set(index_tuples))
     }
 
-    if (schema_list !== 'no_set') {
+    if (schema_list !== null) {
         ops.push(schema.set(schema_list))
     }
 
