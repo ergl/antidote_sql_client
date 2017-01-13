@@ -61,6 +61,7 @@ function scan(remote, table, range, {in_tx} = {in_tx: true}) {
 // -- For every field in schema (without pk field)
 // -- Read encoding(key+field)
 // TODO: Compare range against keyrange and throw on key outside of it?
+// TODO: Support index keys
 function rawScan(remote, table, range) {
     const f_schema = tableMetadata.getSchema(remote, table)
     return f_schema.then(schema => {
