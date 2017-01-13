@@ -112,6 +112,8 @@ function fieldIndexed(remote, table_name, field) {
 
 function indexOfField(remote, table_name, indexed_field) {
     return getIndices(remote, table_name).then(indices => {
+        if (indices === undefined) throw `Cant't locate table ${table_name}`
+
         const index = indices.reduce((acc, {field, index_name}) => {
             if (field === indexed_field) {
                 return acc.concat(index_name)
