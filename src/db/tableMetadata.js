@@ -155,7 +155,7 @@ function generateMetaOps(remote, table_name, opts = {increment: 0, indices: [], 
         ops.push(indices.set(index_tuples))
     }
 
-    if (schema !== 'no_set') {
+    if (schema_list !== 'no_set') {
         ops.push(schema.set(schema_list))
     }
 
