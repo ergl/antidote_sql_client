@@ -16,8 +16,8 @@ function create(remote, name, schema) {
 // 3. Inside a transaction:
 // 3/1. encode(pk) -> pk_value
 // 3/2. for (k, v) in schema: encode(k) -> v
-function insertInto(remote, name, pk, mapping, {in_tx} = {in_tx: true}) {
-    const runnable = tx => rawInsert(tx, name, pk, mapping)
+function insertInto(remote, name, mapping, {in_tx} = {in_tx: true}) {
+    const runnable = tx => rawInsert(tx, name, mapping)
     if (in_tx) {
         return kv.runT(remote, runnable)
     }
@@ -25,18 +25,21 @@ function insertInto(remote, name, pk, mapping, {in_tx} = {in_tx: true}) {
     return runnable(remote)
 }
 
-function rawInsert(remote, name, pk, mapping) {
+function rawInsert(remote, table, mapping) {
     const fields = Object.keys(mapping)
-    const schema = fields.concat(pk)
     const values = fields.map(f => mapping[f])
 
-    return tableMetadata.validateSchema(remote, name, schema).then(r => {
-        if (!r) throw "Invalid schema"
-        return tableMetadata.incrAndGetKey(remote, name, {in_tx: false})
+    return tableMetadata.getPKField(remote, table).then(pk_field => {
+        return fields.concat(pk_field)
+    }).then(schema => {
+        return tableMetadata.validateSchema(remote, table, schema).then(r => {
+            if (!r) throw "Invalid schema"
+            return tableMetadata.incrAndGetKey(remote, table, {in_tx: false})
+        })
     }).then(pk_value => {
-        const pk_key = keyEncoding.encodePrimary(name, pk_value)
+        const pk_key = keyEncoding.encodePrimary(table, pk_value)
         return kv.put(remote, pk_key, pk_value).then(_ => {
-            const field_keys = fields.map(f => keyEncoding.encodeField(name, pk_value, f))
+            const field_keys = fields.map(f => keyEncoding.encodeField(table, pk_value, f))
             return kv.putPar(remote, field_keys, values)
         })
     })
