@@ -2,7 +2,6 @@ const prefixSep = '/'
 const metaSep = '#'
 const keyPrefix = 'PK'
 
-const metaDataPrefix = 'metadata'
 const metaIndexPrefix = 'indices'
 const metaCounterPrefix = 'keyrange'
 const metaSchemaPrefix = 'schema'
@@ -34,9 +33,6 @@ function encode(term) {
     switch (type) {
         case 'table': {
             return encodeTableName(content.table_name)
-        }
-        case 'meta': {
-            return encodeMeta(content.table_name)
         }
         case 'meta_counter': {
             return encodeMetaCounter(content.table_name)
@@ -71,25 +67,9 @@ function decodeTableName(term) {
     return {table: {table_name: term}}
 }
 
-function encodeMeta(table) {
-    if (isBare(table)) {
-        return metaConcat(encodeTableName(table), metaDataPrefix)
-    }
-
-    throw "Can't encode meta information for non-tables"
-}
-
-function decodeMeta(table) {
-    return {
-        meta: {
-            table_name: table
-        }
-    }
-}
-
 function encodeMetaCounter(table) {
     if (isBare(table)) {
-        return metaConcat(encodeMeta(table), metaCounterPrefix)
+        return metaConcat(encodeTableName(table), metaCounterPrefix)
     }
 
     throw "Can't encode meta information for non-tables"
@@ -105,7 +85,7 @@ function decodeMetaCounter(term) {
 
 function encodeMetaIndex(table) {
     if (isBare(table)) {
-        return metaConcat(encodeMeta(table), metaIndexPrefix)
+        return metaConcat(encodeTableName(table), metaIndexPrefix)
     }
 
     throw "Can't encode meta information for non-tables"
@@ -121,7 +101,7 @@ function decodeMetaIndex(term) {
 
 function encodeMetaSchema(table) {
     if (isBare(table)) {
-        return metaConcat(encodeMeta(table), metaSchemaPrefix)
+        return metaConcat(encodeTableName(table), metaSchemaPrefix)
     }
 
     throw "Can't encode meta information for non-tables"
@@ -227,23 +207,15 @@ function decode(key) {
             const meta_length = meta_parts.length
 
             if (meta_length === 2) {
-                if (meta_parts[1] === metaDataPrefix) {
-                    return decodeMeta(meta_parts[0])
-                }
-
-                throw "Invalid key"
-            }
-
-            if (meta_length === 3 && (meta_parts[1] == metaDataPrefix)) {
-                if (meta_parts[2] === metaCounterPrefix) {
+                if (meta_parts[1] === metaCounterPrefix) {
                     return decodeMetaCounter(meta_parts[0])
                 }
 
-                if (meta_parts[2] === metaIndexPrefix) {
+                if (meta_parts[1] === metaIndexPrefix) {
                     return decodeMetaIndex(meta_parts[0])
                 }
 
-                if (meta_parts[2] == metaSchemaPrefix) {
+                if (meta_parts[1] == metaSchemaPrefix) {
                     return decodeMetaSchema(meta_parts[0])
                 }
 
@@ -288,10 +260,12 @@ function decode(key) {
 module.exports = {
     decode,
     encode,
+
+    encodeTableName,
     encodePrimary,
     encodeField,
     encodeIndex,
-    encodeMeta,
+
     encodeMetaIndex,
     encodeMetaSchema,
     encodeMetaCounter,

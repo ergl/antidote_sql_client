@@ -161,7 +161,7 @@ function generateMetaOps(remote, table_name, opts = {increment: 0, indices: [], 
 }
 
 function generateMetaRef(remote, table_name) {
-    return remote.map(keyEncoding.encodeMeta(table_name))
+    return remote.map(keyEncoding.encodeTableName(table_name))
 }
 
 function generateIndexRef(remote, table_name, index_name) {
