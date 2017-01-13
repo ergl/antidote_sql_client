@@ -5,6 +5,7 @@ const keyPrefix = 'PK'
 const metaIndexPrefix = 'indices'
 const metaCounterPrefix = 'keyrange'
 const metaSchemaPrefix = 'schema'
+const metaPKFieldPrefix = 'primary'
 
 function concat(...args) {
     return args.join(prefixSep)
@@ -42,6 +43,9 @@ function encode(term) {
         }
         case 'meta_schema': {
             return encodeMetaSchema(content.table_name)
+        }
+        case 'meta_pk': {
+            return encodeMetaPK(content.table_name)
         }
         case 'index': {
             return encodeIndex(content.table_name, content.index_name)
@@ -115,6 +119,21 @@ function decodeMetaSchema(term) {
     }
 }
 
+function encodeMetaPK(table) {
+    if (isBare(table)) {
+        return metaConcat(encodeTableName(table), metaPKFieldPrefix)
+    }
+
+    throw "Can't encode meta information for non-tables"
+}
+
+function decodeMetaPK(term) {
+    return {
+        meta_pk: {
+            table_name: term
+        }
+    }
+}
 function encodePrimary(table, key) {
     const tableEncode = encodeTableName(table)
 
@@ -219,6 +238,10 @@ function decode(key) {
                     return decodeMetaSchema(meta_parts[0])
                 }
 
+                if (meta_parts[1] == metaPKFieldPrefix) {
+                    return decodeMetaPK(meta_parts[0])
+                }
+
                 throw "Invalid key"
             }
 
@@ -266,6 +289,7 @@ module.exports = {
     encodeField,
     encodeIndex,
 
+    encodeMetaPK,
     encodeMetaIndex,
     encodeMetaSchema,
     encodeMetaCounter,

@@ -2,8 +2,10 @@ const kv = require('../db/kv')
 const keyEncoding = require('../db/keyEncoding')
 const tableMetadata = require('../db/tableMetadata')
 
+// TODO: Right now we pick the first field as primary key,
+// but maybe let the user pick?
 function create(remote, name, schema) {
-    return tableMetadata.createMeta(remote, name, schema)
+    return tableMetadata.createMeta(remote, name, schema[0], schema)
 }
 
 // TODO: Take fks and indices into account
@@ -43,5 +45,5 @@ function rawInsert(remote, name, pk, mapping) {
 
 module.exports = {
     create,
-    insertInto
+    insertInto,
 }
