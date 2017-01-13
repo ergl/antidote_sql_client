@@ -45,6 +45,40 @@ function rawInsert(remote, table, mapping) {
     })
 }
 
+// TODO: Support more complex selects
+// Right now we only support queries against specific primary keys
+function select(remote, table, fields, pk_value, {in_tx} = {in_tx: true}) {
+    const run = tx => rawSelect(tx, table, fields, pk_value)
+
+    if (in_tx) {
+        return kv.runT(remote, run)
+    }
+
+    return run(remote)
+}
+
+function rawSelect(remote, table, fields, pk_value) {
+    const pk_values = Array.isArray(pk_value) ? pk_value : [pk_value]
+    const perform_scan = lookup_fields => {
+        return scan(remote, table, pk_values).then(res => res.map(row => {
+            return Object.keys(row)
+                .filter(k => lookup_fields.includes(k))
+                .reduce((acc, k) => Object.assign(acc, {[k]: row[k]}), {})
+        }))
+    }
+
+    // If we query '*', get the entire schema
+    if (Array.isArray(fields) && fields.length === 1 && fields[0] === '*') {
+        return tableMetadata.getSchema(remote, table).then(schema => perform_scan(schema))
+    }
+
+    return tableMetadata.validateSchemaSubset(remote, table, fields).then(r => {
+        if (!r) throw "Invalid schema"
+        return perform_scan(fields)
+    })
+
+}
+
 // TODO: Maybe change range from a simple array into something more comples
 function scan(remote, table, range, {in_tx} = {in_tx: true}) {
     const runnable = tx => rawScan(tx, table, range)
@@ -98,5 +132,6 @@ function scanFields(remote, field_keys, fields) {
 module.exports = {
     create,
     insertInto,
-    scan
+    scan,
+    select
 }
