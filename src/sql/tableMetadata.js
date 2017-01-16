@@ -1,5 +1,5 @@
-const kv = require('./kv')
-const keyEncoding = require('./keyEncoding')
+const kv = require('./../db/kv')
+const keyEncoding = require('./../db/keyEncoding')
 
 function createMeta(remote, table_name, pk_field, schema) {
     const ops = generateMetaOps(remote, table_name, {

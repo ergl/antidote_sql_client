@@ -1,6 +1,6 @@
 const kv = require('../db/kv')
 const keyEncoding = require('../db/keyEncoding')
-const tableMetadata = require('../db/tableMetadata')
+const tableMetadata = require('tableMetadata')
 
 // TODO: Right now we pick the first field as primary key,
 // but maybe let the user pick?
