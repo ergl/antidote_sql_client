@@ -16,7 +16,7 @@ function create(remote, name, schema) {
 // 3. Inside a transaction:
 // 3/1. encode(pk) -> pk_value
 // 3/2. for (k, v) in schema: encode(k) -> v
-function insertInto(remote, name, mapping, {in_tx} = {in_tx: true}) {
+function insertInto_T(remote, name, mapping, {in_tx} = {in_tx: true}) {
     const runnable = tx => rawInsert(tx, name, mapping)
     if (in_tx) {
         return kv.runT(remote, runnable)
@@ -34,7 +34,7 @@ function rawInsert(remote, table, mapping) {
     }).then(schema => {
         return tableMetadata.validateSchema(remote, table, schema).then(r => {
             if (!r) throw "Invalid schema"
-            return tableMetadata.incrAndGetKey(remote, table, {in_tx: false})
+            return tableMetadata.fetchAddPrimaryKey_T(remote, table, {in_tx: false})
         })
     }).then(pk_value => {
         const pk_key = keyEncoding.encodePrimary(table, pk_value)
@@ -47,7 +47,7 @@ function rawInsert(remote, table, mapping) {
 
 // TODO: Support more complex selects
 // Right now we only support queries against specific primary keys
-function select(remote, table, fields, pk_value, {in_tx} = {in_tx: true}) {
+function select_T(remote, table, fields, pk_value, {in_tx} = {in_tx: true}) {
     const run = tx => rawSelect(tx, table, fields, pk_value)
 
     if (in_tx) {
@@ -60,7 +60,7 @@ function select(remote, table, fields, pk_value, {in_tx} = {in_tx: true}) {
 function rawSelect(remote, table, fields, pk_value) {
     const pk_values = Array.isArray(pk_value) ? pk_value : [pk_value]
     const perform_scan = lookup_fields => {
-        return scan(remote, table, pk_values).then(res => res.map(row => {
+        return scan_T(remote, table, pk_values).then(res => res.map(row => {
             return Object.keys(row)
                 .filter(k => lookup_fields.includes(k))
                 .reduce((acc, k) => Object.assign(acc, {[k]: row[k]}), {})
@@ -80,7 +80,7 @@ function rawSelect(remote, table, fields, pk_value) {
 }
 
 // TODO: Maybe change range from a simple array into something more comples
-function scan(remote, table, range, {in_tx} = {in_tx: true}) {
+function scan_T(remote, table, range, {in_tx} = {in_tx: true}) {
     const runnable = tx => rawScan(tx, table, range)
 
     if (in_tx && remote.startTransaction !== undefined) {
@@ -131,7 +131,7 @@ function scanFields(remote, field_keys, fields) {
 
 module.exports = {
     create,
-    insertInto,
-    scan,
-    select
+    insertInto_T,
+    scan_T,
+    select_T
 }
