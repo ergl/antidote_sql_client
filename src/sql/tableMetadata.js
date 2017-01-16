@@ -36,7 +36,7 @@ function fetchAddPrimaryKey_T(remote, table_name, {in_tx} = {in_tx: true}) {
     return runnable(remote)
 }
 
-function getNextIndexKeyRaw(remote, table_name, index_name, {in_tx} = {in_tx: true}) {
+function getNextIndexKey_Unsafe(remote, table_name, index_name, {in_tx} = {in_tx: true}) {
     return isIndex(remote, table_name, index_name).then(r => {
         if (!r) throw `${index_name} doesn't reference a field in ${table_name}`
 
@@ -53,7 +53,7 @@ function incrIndexKey(remote, table_name, index_name) {
 function fetchAddIndexKey_T(remote, table_name, index_name, {in_tx} = {in_tx: true}) {
     const runnable = tx => {
         return incrIndexKey(tx, table_name, index_name).then(_ => {
-            return getNextIndexKeyRaw(tx, table_name, index_name)
+            return getNextIndexKey_Unsafe(tx, table_name, index_name)
         })
     }
 
@@ -217,13 +217,13 @@ function addFK_T(remote, table_name, mapping, {in_tx} = {in_tx: true}) {
 
 
 function getForeignTable_T(remote, table_name, fk_field, {in_tx} = {in_tx: true}) {
-    const run = tx => getForeignTable(tx, table_name, fk_field)
+    const run = tx => getForeignTable_Unsafe(tx, table_name, fk_field)
 
     if (in_tx) {
         return kv.runT(remote, run)
     }
 
-    return getForeignTable(remote)
+    return getForeignTable_Unsafe(remote)
 }
 
 // Given a table name, and one of its fields, return the associated
@@ -231,7 +231,7 @@ function getForeignTable_T(remote, table_name, fk_field, {in_tx} = {in_tx: true}
 //
 // If the given field references more than one table, only the first one
 // is returned.
-function getForeignTable(remote, table_name, fk_field) {
+function getForeignTable_Unsafe(remote, table_name, fk_field) {
     return getFKs(remote, table_name).then(fk_tuples => {
         const tuples = fk_tuples.filter(({field_name}) => {
             return (field_name === fk_field)
@@ -296,6 +296,7 @@ module.exports = {
     addFK_T,
     getForeignTable_T,
 
+    getSchema,
     validateSchema,
     validateSchemaSubset,
 

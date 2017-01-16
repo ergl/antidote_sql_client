@@ -2,8 +2,8 @@ const kv = require('../db/kv')
 const keyEncoding = require('../db/keyEncoding')
 const tableMetadata = require('tableMetadata')
 
-// TODO: Right now we pick the first field as primary key,
-// but maybe let the user pick?
+// FIXME: Right now we pick the first field as primary key,
+// let the user pick?
 function create(remote, name, schema) {
     return tableMetadata.createMeta(remote, name, schema[0], schema)
 }
@@ -17,7 +17,7 @@ function create(remote, name, schema) {
 // 3/1. encode(pk) -> pk_value
 // 3/2. for (k, v) in schema: encode(k) -> v
 function insertInto_T(remote, name, mapping, {in_tx} = {in_tx: true}) {
-    const runnable = tx => rawInsert(tx, name, mapping)
+    const runnable = tx => insertInto_Unsafe(tx, name, mapping)
     if (in_tx) {
         return kv.runT(remote, runnable)
     }
@@ -25,7 +25,7 @@ function insertInto_T(remote, name, mapping, {in_tx} = {in_tx: true}) {
     return runnable(remote)
 }
 
-function rawInsert(remote, table, mapping) {
+function insertInto_Unsafe(remote, table, mapping) {
     const fields = Object.keys(mapping)
     const values = fields.map(f => mapping[f])
 
@@ -48,7 +48,7 @@ function rawInsert(remote, table, mapping) {
 // TODO: Support more complex selects
 // Right now we only support queries against specific primary keys
 function select_T(remote, table, fields, pk_value, {in_tx} = {in_tx: true}) {
-    const run = tx => rawSelect(tx, table, fields, pk_value)
+    const run = tx => select_Unsafe(tx, table, fields, pk_value)
 
     if (in_tx) {
         return kv.runT(remote, run)
@@ -57,10 +57,11 @@ function select_T(remote, table, fields, pk_value, {in_tx} = {in_tx: true}) {
     return run(remote)
 }
 
-function rawSelect(remote, table, fields, pk_value) {
+// Should always be called from inside a transaction
+function select_Unsafe(remote, table, fields, pk_value) {
     const pk_values = Array.isArray(pk_value) ? pk_value : [pk_value]
     const perform_scan = lookup_fields => {
-        return scan_T(remote, table, pk_values).then(res => res.map(row => {
+        return scan_T(remote, table, pk_values, {in_tx: false}).then(res => res.map(row => {
             return Object.keys(row)
                 .filter(k => lookup_fields.includes(k))
                 .reduce((acc, k) => Object.assign(acc, {[k]: row[k]}), {})
@@ -81,9 +82,9 @@ function rawSelect(remote, table, fields, pk_value) {
 
 // TODO: Maybe change range from a simple array into something more comples
 function scan_T(remote, table, range, {in_tx} = {in_tx: true}) {
-    const runnable = tx => rawScan(tx, table, range)
+    const runnable = tx => scan_Unsafe(tx, table, range)
 
-    if (in_tx && remote.startTransaction !== undefined) {
+    if (in_tx) {
         return kv.runT(remote, runnable)
     }
 
@@ -96,7 +97,7 @@ function scan_T(remote, table, range, {in_tx} = {in_tx: true}) {
 // -- Read encoding(key+field)
 // TODO: Compare range against keyrange and throw on key outside of it?
 // TODO: Support index keys
-function rawScan(remote, table, range) {
+function scan_Unsafe(remote, table, range) {
     const f_schema = tableMetadata.getSchema(remote, table)
     return f_schema.then(schema => {
         const keys = range.map(k => keyEncoding.encodePrimary(table, k))
@@ -131,7 +132,7 @@ function scanFields(remote, field_keys, fields) {
 
 module.exports = {
     create,
-    insertInto_T,
     scan_T,
-    select_T
+    select_T,
+    insertInto_T
 }
