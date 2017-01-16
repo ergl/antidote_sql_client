@@ -1,11 +1,11 @@
 const kv = require('./kv')
 const keyEncoding = require('./keyEncoding')
 
-// TODO: Encode fks?
 function createMeta(remote, table_name, pk_field, schema) {
     const ops = generateMetaOps(remote, table_name, {
         increment: 0,
         indices: [],
+        fks: [],
         schema,
         pk_field
     })
@@ -152,12 +152,14 @@ function generateMetaOps(remote, table_name, opts) {
     const index_tuples = opts.indices || null
     const schema_list = opts.schema || null
     const primary_key_field = opts.pk_field || null
+    const fk_tuples = opts.fks || null
 
     const meta_ref = generateMetaRef(remote, table_name)
     const keyrange = meta_ref.counter(keyEncoding.encodeMetaCounter(table_name))
     const indices = meta_ref.register(keyEncoding.encodeMetaIndex(table_name))
     const schema = meta_ref.register(keyEncoding.encodeMetaSchema(table_name))
     const primary = meta_ref.register(keyEncoding.encodeMetaPK(table_name))
+    const fks = meta_ref.register(keyEncoding.encodeMetaFK(table_name))
 
     const ops = [keyrange.increment(inc)]
 
@@ -171,6 +173,10 @@ function generateMetaOps(remote, table_name, opts) {
 
     if (primary_key_field !== null) {
         ops.push(primary.set(primary_key_field))
+    }
+
+    if (fk_tuples !== null) {
+        ops.push(fks.set(fk_tuples))
     }
 
     return ops
