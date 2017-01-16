@@ -147,6 +147,94 @@ function getPKField(remote, table_name) {
     })
 }
 
+// Given a table name, return a map of foreign keys
+// where the map contains `field_name` and `reference_table`
+// If the table doesn't exist, return the empty list.
+function getFKs(remote, table_name) {
+    const meta_ref = generateMetaRef(remote, table_name)
+    const fk_tuples_key = keyEncoding.encodeMetaFK(table_name)
+    return meta_ref.read().then(meta_values => {
+        return meta_values.registerValue(fk_tuples_key)
+    }).then(fks => fks === undefined ? [] : fks)
+}
+
+// Given a table name, swap its foreign key map
+// with the given one.
+function setFK(remote, table_name, fks) {
+    return remote.update(generateMetaOps(remote, table_name, { fks: fks }))
+}
+
+// Given a table name, and a list of maps `{field_name, reference_table}`,
+// adds a foreign key on `table.field_name`, pointing to `reference_table.field_name`,
+// for every element of the map list.
+// Fails if:
+// a) This table, or any of the given `reference_table`s don't exist
+// b) Any of the given fields don't exist.
+function addFK(remote, table_name, mapping, {in_tx} = {in_tx: true}) {
+    // FIXME: Assumes you can't add more than FK per field
+    // This array may contain duplicates, but we assume it doesn't
+    const table_mapping = Array.isArray(mapping) ? mapping : [mapping]
+    const reference_fields = table_mapping.map(({field_name}) => field_name)
+
+    const runnable = tx => {
+        // For all reference tables, check that
+        // a) that table exists
+        // b) the field referenced is in the foreign table schema
+        const constraints = table_mapping.map(({field_name, reference_table}) => {
+            return validateSchemaSubset(tx, reference_table, [field_name])
+        })
+
+        // We also add the constraint that the given fields are in our schema
+        constraints.push(validateSchemaSubset(tx, table_name, reference_fields))
+
+        // Check if all the constraints are satisfied
+        const check = Promise.all(constraints).then(r => r.reduce((prev, curr) => prev && curr))
+
+        return check.then(r => {
+            if (!r) throw "Can't add fk on non-existent field"
+
+            return getFKs(tx, table_name).then(fk_tuples => {
+                return setFK(tx, table_name, fk_tuples.concat(table_mapping))
+            })
+        })
+    }
+
+    if (in_tx) {
+        return kv.runT(remote, runnable)
+    }
+
+    return runnable(remote)
+}
+
+
+function getForeignTable(remote, table_name, fk_field, {in_tx} = {in_tx: true}) {
+    const run = tx => getForeignTableRaw(tx, table_name, fk_field)
+
+    if (in_tx) {
+        return kv.runT(remote, run)
+    }
+
+    return getForeignTableRaw(remote)
+}
+
+// Given a table name, and one of its fields, return the associated
+// foreign key table, if it exists, or undefined otherwise.
+//
+// If the given field references more than one table, only the first one
+// is returned.
+function getForeignTableRaw(remote, table_name, fk_field) {
+    return getFKs(remote, table_name).then(fk_tuples => {
+        const tuples = fk_tuples.filter(({field_name}) => {
+            return (field_name === fk_field)
+        })
+
+        if (tuples.length === 0) return undefined
+
+        // Only return first
+        return tuples[0].reference_table
+    })
+}
+
 function generateMetaOps(remote, table_name, opts) {
     const inc = opts.increment || 0
     const index_tuples = opts.indices || null
@@ -194,6 +282,10 @@ module.exports = {
     createMeta,
 
     getPKField,
+
+    addFK,
+    getFKs,
+    getForeignTable,
 
     getSchema,
     validateSchema,
