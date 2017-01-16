@@ -24,7 +24,7 @@ function incrKey(remote, table_name) {
     return remote.update(generateMetaOps(remote, table_name, { increment: 1 }))
 }
 
-function incrAndGetKey(remote, table_name, {in_tx} = {in_tx: true}) {
+function fetchAddPrimaryKey_T(remote, table_name, {in_tx} = {in_tx: true}) {
     const runnable = tx => {
         return incrKey(tx, table_name).then(_ => getNextKey(tx, table_name))
     }
@@ -36,9 +36,13 @@ function incrAndGetKey(remote, table_name, {in_tx} = {in_tx: true}) {
     return runnable(remote)
 }
 
-function getNextIndexKey(remote, table_name, index_name) {
-    const ref = generateIndexRef(remote, table_name, index_name)
-    return ref.read()
+function getNextIndexKeyRaw(remote, table_name, index_name, {in_tx} = {in_tx: true}) {
+    return isIndex(remote, table_name, index_name).then(r => {
+        if (!r) throw `${index_name} doesn't reference a field in ${table_name}`
+
+        const ref = generateIndexRef(remote, table_name, index_name)
+        return ref.read()
+    })
 }
 
 function incrIndexKey(remote, table_name, index_name) {
@@ -46,10 +50,10 @@ function incrIndexKey(remote, table_name, index_name) {
     return remote.update(ref.increment(1))
 }
 
-function incrAndGetIndexKey(remote, table_name, index_name, {in_tx} = {in_tx: true}) {
+function fetchAddIndexKey_T(remote, table_name, index_name, {in_tx} = {in_tx: true}) {
     const runnable = tx => {
         return incrIndexKey(tx, table_name, index_name).then(_ => {
-            return getNextIndexKey(tx, table_name, index_name)
+            return getNextIndexKeyRaw(tx, table_name, index_name)
         })
     }
 
@@ -72,7 +76,7 @@ function setIndex(remote, table_name, indices) {
     return remote.update(generateMetaOps(remote, table_name, { indices: indices }))
 }
 
-function addIndex(remote, table_name, mapping, {in_tx} = {in_tx: true}) {
+function addIndex_T(remote, table_name, mapping, {in_tx} = {in_tx: true}) {
     const runnable = tx => {
         return getSchema(remote, table_name).then(schema => {
             if (!schema.includes(mapping.field)) {
@@ -105,6 +109,16 @@ function indexOfField(remote, table_name, indexed_field) {
             return acc
         }, [])
         return index.length === 0 ? index[0] : index
+    })
+}
+
+// Given a table and an index name, checks if the index
+// references a field in that table
+function isIndex(remote, table_name, index_name) {
+    return getIndices(remote, table_name).then(indices => {
+        if (indices === undefined) throw `Cant't locate table ${table_name}`
+
+        return indices.map(({index_name}) => index_name).includes(index_name)
     })
 }
 
@@ -165,7 +179,7 @@ function setFK(remote, table_name, fks) {
 // Fails if:
 // a) This table, or any of the given `reference_table`s don't exist
 // b) Any of the given fields don't exist.
-function addFK(remote, table_name, mapping, {in_tx} = {in_tx: true}) {
+function addFK_T(remote, table_name, mapping, {in_tx} = {in_tx: true}) {
     // FIXME: Assumes you can't add more than FK per field
     // This array may contain duplicates, but we assume it doesn't
     const table_mapping = Array.isArray(mapping) ? mapping : [mapping]
@@ -202,14 +216,14 @@ function addFK(remote, table_name, mapping, {in_tx} = {in_tx: true}) {
 }
 
 
-function getForeignTable(remote, table_name, fk_field, {in_tx} = {in_tx: true}) {
-    const run = tx => getForeignTableRaw(tx, table_name, fk_field)
+function getForeignTable_T(remote, table_name, fk_field, {in_tx} = {in_tx: true}) {
+    const run = tx => getForeignTable(tx, table_name, fk_field)
 
     if (in_tx) {
         return kv.runT(remote, run)
     }
 
-    return getForeignTableRaw(remote)
+    return getForeignTable(remote)
 }
 
 // Given a table name, and one of its fields, return the associated
@@ -217,7 +231,7 @@ function getForeignTable(remote, table_name, fk_field, {in_tx} = {in_tx: true}) 
 //
 // If the given field references more than one table, only the first one
 // is returned.
-function getForeignTableRaw(remote, table_name, fk_field) {
+function getForeignTable(remote, table_name, fk_field) {
     return getFKs(remote, table_name).then(fk_tuples => {
         const tuples = fk_tuples.filter(({field_name}) => {
             return (field_name === fk_field)
@@ -278,17 +292,16 @@ module.exports = {
 
     getPKField,
 
-    addFK,
     getFKs,
-    getForeignTable,
+    addFK_T,
+    getForeignTable_T,
 
-    getSchema,
     validateSchema,
     validateSchemaSubset,
 
-    incrAndGetKey,
-    incrAndGetIndexKey,
+    fetchAddIndexKey_T,
+    fetchAddPrimaryKey_T,
 
-    addIndex,
+    addIndex_T,
     indexOfField
 }
