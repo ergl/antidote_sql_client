@@ -1,9 +1,11 @@
 const kv = require('../db/kv')
+const pks = require('./meta/pks')
+const _schema = require('./meta/schema')
 const keyEncoding = require('../db/keyEncoding')
-const tableMetadata = require('../db/tableMetadata')
+const tableMetadata = require('./tableMetadata')
 
-// TODO: Right now we pick the first field as primary key,
-// but maybe let the user pick?
+// FIXME: Right now we pick the first field as primary key,
+// let the user pick?
 function create(remote, name, schema) {
     return tableMetadata.createMeta(remote, name, schema[0], schema)
 }
@@ -16,29 +18,34 @@ function create(remote, name, schema) {
 // 3. Inside a transaction:
 // 3/1. encode(pk) -> pk_value
 // 3/2. for (k, v) in schema: encode(k) -> v
-function insertInto_T(remote, name, mapping, {in_tx} = {in_tx: true}) {
-    const runnable = tx => rawInsert(tx, name, mapping)
+function insertInto_T(remote, name, mapping, {in_tx} = {in_tx: false}) {
+    const runnable = tx => insertInto_Unsafe(tx, name, mapping)
+
     if (in_tx) {
-        return kv.runT(remote, runnable)
+        return runnable(remote)
     }
 
-    return runnable(remote)
+    return kv.runT(remote, runnable, {ignore_ct: false})
 }
 
-function rawInsert(remote, table, mapping) {
+function insertInto_Unsafe(remote, table, mapping) {
     const fields = Object.keys(mapping)
     const values = fields.map(f => mapping[f])
 
-    return tableMetadata.getPKField(remote, table).then(pk_field => {
+    return pks.getPKField(remote, table).then(pk_field => {
         return fields.concat(pk_field)
     }).then(schema => {
-        return tableMetadata.validateSchema(remote, table, schema).then(r => {
+        return _schema.validateSchema(remote, table, schema).then(r => {
             if (!r) throw "Invalid schema"
-            return tableMetadata.fetchAddPrimaryKey_T(remote, table, {in_tx: false})
+
+            // We MUST be inside a transaction, so the call
+            // to `fetchAddPrimaryKey_T` MUST NOT spawn a new transaction.
+            return pks.fetchAddPrimaryKey_T(remote, table, {in_tx: true})
         })
     }).then(pk_value => {
+        console.log(pk_value)
         const pk_key = keyEncoding.encodePrimary(table, pk_value)
-        return kv.put(remote, pk_key, pk_value).then(_ => {
+        return kv.put(remote, pk_key, pk_value).then(_ct => {
             const field_keys = fields.map(f => keyEncoding.encodeField(table, pk_value, f))
             return kv.putPar(remote, field_keys, values)
         })
@@ -47,20 +54,23 @@ function rawInsert(remote, table, mapping) {
 
 // TODO: Support more complex selects
 // Right now we only support queries against specific primary keys
-function select_T(remote, table, fields, pk_value, {in_tx} = {in_tx: true}) {
-    const run = tx => rawSelect(tx, table, fields, pk_value)
+function select_T(remote, table, fields, pk_value, {in_tx} = {in_tx: false}) {
+    const run = tx => select_Unsafe(tx, table, fields, pk_value)
 
     if (in_tx) {
-        return kv.runT(remote, run)
+        return run(remote)
     }
 
-    return run(remote)
+    return kv.runT(remote, run)
 }
 
-function rawSelect(remote, table, fields, pk_value) {
+// Should always be called from inside a transaction
+function select_Unsafe(remote, table, fields, pk_value) {
     const pk_values = Array.isArray(pk_value) ? pk_value : [pk_value]
     const perform_scan = lookup_fields => {
-        return scan_T(remote, table, pk_values).then(res => res.map(row => {
+        // We MUST be inside a transaction, so the call to `scan_T` MUST NOT
+        // spawn a new transaction.
+        return scan_T(remote, table, pk_values, {in_tx: true}).then(res => res.map(row => {
             return Object.keys(row)
                 .filter(k => lookup_fields.includes(k))
                 .reduce((acc, k) => Object.assign(acc, {[k]: row[k]}), {})
@@ -69,10 +79,10 @@ function rawSelect(remote, table, fields, pk_value) {
 
     // If we query '*', get the entire schema
     if (Array.isArray(fields) && fields.length === 1 && fields[0] === '*') {
-        return tableMetadata.getSchema(remote, table).then(schema => perform_scan(schema))
+        return _schema.getSchema(remote, table).then(schema => perform_scan(schema))
     }
 
-    return tableMetadata.validateSchemaSubset(remote, table, fields).then(r => {
+    return _schema.validateSchemaSubset(remote, table, fields).then(r => {
         if (!r) throw "Invalid schema"
         return perform_scan(fields)
     })
@@ -80,14 +90,14 @@ function rawSelect(remote, table, fields, pk_value) {
 }
 
 // TODO: Maybe change range from a simple array into something more comples
-function scan_T(remote, table, range, {in_tx} = {in_tx: true}) {
-    const runnable = tx => rawScan(tx, table, range)
+function scan_T(remote, table, range, {in_tx} = {in_tx: false}) {
+    const runnable = tx => scan_Unsafe(tx, table, range)
 
-    if (in_tx && remote.startTransaction !== undefined) {
-        return kv.runT(remote, runnable)
+    if (in_tx) {
+        return runnable(remote)
     }
 
-    return runnable(remote)
+    return kv.runT(remote, runnable)
 }
 
 // For every key in range:
@@ -96,12 +106,12 @@ function scan_T(remote, table, range, {in_tx} = {in_tx: true}) {
 // -- Read encoding(key+field)
 // TODO: Compare range against keyrange and throw on key outside of it?
 // TODO: Support index keys
-function rawScan(remote, table, range) {
-    const f_schema = tableMetadata.getSchema(remote, table)
+function scan_Unsafe(remote, table, range) {
+    const f_schema = _schema.getSchema(remote, table)
     return f_schema.then(schema => {
         const keys = range.map(k => keyEncoding.encodePrimary(table, k))
 
-        const f_pk_field = tableMetadata.getPKField(remote, table)
+        const f_pk_field = pks.getPKField(remote, table)
         const f_only_fields = f_pk_field.then(pk_field => schema.filter(f => f !== pk_field))
 
         const f_results = keys.map((key, idx) => {
@@ -131,7 +141,7 @@ function scanFields(remote, field_keys, fields) {
 
 module.exports = {
     create,
-    insertInto_T,
     scan_T,
-    select_T
+    select_T,
+    insertInto_T
 }
