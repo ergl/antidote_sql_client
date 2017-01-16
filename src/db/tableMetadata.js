@@ -68,7 +68,7 @@ function getIndices(remote, table_name) {
     })
 }
 
-function setIndex(remote, table_name, indices = 'no_set') {
+function setIndex(remote, table_name, indices) {
     return remote.update(generateMetaOps(remote, table_name, { indices: indices }))
 }
 
