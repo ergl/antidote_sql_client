@@ -119,6 +119,8 @@ function indexOfField(remote, table_name, indexed_field) {
     })
 }
 
+// Get the field list of the given table
+// If the table doesn't exist, return the empty list
 function getSchema(remote, table_name) {
     const meta_ref = generateMetaRef(remote, table_name)
     const schema_key = keyEncoding.encodeMetaSchema(table_name)
@@ -127,12 +129,16 @@ function getSchema(remote, table_name) {
     }).then(sch => sch === undefined ? [] : sch)
 }
 
+// Check if the given field list matches _exactly_ the
+// schema of the given table name
 function validateSchema(remote, table_name, schema) {
     return getSchema(remote, table_name).then(sch => {
         return sch.every(f => schema.includes(f))
     })
 }
 
+// Check if the given field list is a subset of the
+// schema of the given table name
 function validateSchemaSubset(remote, table_name, fields) {
     return getSchema(remote, table_name).then(sch => {
         return fields.every(f => sch.includes(f))
