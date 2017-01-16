@@ -124,7 +124,7 @@ function getSchema(remote, table_name) {
     const schema_key = keyEncoding.encodeMetaSchema(table_name)
     return meta_ref.read().then(meta_values => {
         return meta_values.registerValue(schema_key)
-    })
+    }).then(sch => sch === undefined ? [] : sch)
 }
 
 function validateSchema(remote, table_name, schema) {
