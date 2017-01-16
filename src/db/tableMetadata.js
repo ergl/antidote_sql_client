@@ -93,17 +93,6 @@ function addIndex(remote, table_name, mapping, {in_tx} = {in_tx: true}) {
 
 }
 
-// TODO: Figure out if we need this
-function fieldIndexed(remote, table_name, field) {
-    const fields = Array.isArray(field) ? field : [field]
-    return getIndices(remote, table_name).then(indices => {
-        const index_fields = indices.map(({field}) => field)
-        return fields.every(f => {
-            return index_fields.includes(f)
-        })
-    })
-}
-
 function indexOfField(remote, table_name, indexed_field) {
     return getIndices(remote, table_name).then(indices => {
         if (indices === undefined) throw `Cant't locate table ${table_name}`
