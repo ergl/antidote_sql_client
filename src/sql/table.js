@@ -100,33 +100,38 @@ function scan_T(remote, table, range, {in_tx} = {in_tx: false}) {
     return kv.runT(remote, runnable)
 }
 
-// For every key in range:
-// - Read that key encoding
-// -- For every field in schema (without pk field)
-// -- Read encoding(key+field)
-// TODO: Compare range against keyrange and throw on key outside of it?
 // TODO: Support index keys
 function scan_Unsafe(remote, table, range) {
-    const f_schema = _schema.getSchema(remote, table)
-    return f_schema.then(schema => {
+    // Assumes keys are numeric
+    const f_cutoff = pks.getCurrentKey(remote, table).then(m => {
+        return range.find(e => e > m)
+    })
+
+    return f_cutoff.then(cutoff => {
+        if (cutoff !== undefined) throw `Error: scan key ${cutoff} out of valid range`
+        return _schema.getSchema(remote, table)
+    }).then(schema => {
+        // For every k in key range, encode k
         const keys = range.map(k => keyEncoding.encodePrimary(table, k))
 
+        // Get the primary key field.
         const f_pk_field = pks.getPKField(remote, table)
-        const f_only_fields = f_pk_field.then(pk_field => schema.filter(f => f !== pk_field))
 
+        // And remove if from the schema, as the pk field is encoded differently.
+        const f_non_pk_fields = f_pk_field.then(pk_field => schema.filter(f => f !== pk_field))
+
+        // For every key, fetch and read the field subkeys
         const f_results = keys.map((key, idx) => {
-            return f_pk_field.then(pk_field => {
-                return f_only_fields.then(only_fields => {
-                    const field_keys = only_fields.map(f => keyEncoding.encodeField(table, range[idx], f))
-                    return scanFields(remote, field_keys.concat(key), only_fields.concat(pk_field))
-                })
+            // `Promise.all` guarantees the same order in promises and results
+            return Promise.all([f_pk_field, f_non_pk_fields]).then(([pk_field, fields]) => {
+                const field_keys = fields.map(f => keyEncoding.encodeField(table, range[idx], f))
+                // After encoding all fields, we append the pk key/field to the range we want to scan
+                return scanFields(remote, field_keys.concat(key), fields.concat(pk_field))
             })
         })
 
-        return Promise.all(f_results).catch(_ => {
-            // FIXME: Return something else, this will swallow all other values
-            return []
-        })
+        // Execute all scanFields calls in parallel
+        return Promise.all(f_results)
     })
 }
 
