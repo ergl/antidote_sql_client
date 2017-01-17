@@ -191,6 +191,7 @@ function scan_Unsafe(remote, table, range) {
 
 // Given a list of encoded keys, and a matching list of field names,
 // build an object s.t. `{f: get(k)}` for every k in field_keys, f in fields
+// TODO: Drop `fields` argument and decode keys instead
 function scanFields(remote, field_keys, fields) {
     return kv.get(remote, field_keys).then(values => {
         return values.reduce((acc, val, idx) => {
