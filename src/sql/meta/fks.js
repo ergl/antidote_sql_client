@@ -1,3 +1,5 @@
+const utils = require('../../utils/index')
+
 const kv = require('./../../db/kv')
 const schema = require('./schema')
 const metaCont = require('./metaCont')
@@ -32,7 +34,7 @@ function addFK_T(remote, table_name, mapping, {in_tx} = {in_tx: false}) {
 function addFK_Unsafe(remote, table_name, mapping) {
     // NOTE: Assumes you can't add more than FK per field.
     // Therefore we assume that `table_mapping` doesn't contain duplicates.
-    const table_mapping = Array.isArray(mapping) ? mapping : [mapping]
+    const table_mapping = utils.arreturn(mapping)
     const reference_fields = table_mapping.map(o => o.field_name)
 
     // For all reference tables, check that

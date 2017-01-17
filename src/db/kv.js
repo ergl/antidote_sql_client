@@ -1,3 +1,5 @@
+const utils = require('../../utils/index')
+
 const antidote_client = require('antidote_ts_client')
 
 function createRemote(port, url, opts = {bucket: "default-bucket"}) {
@@ -35,8 +37,8 @@ function runT(remote, fn, {ignore_ct} = {ignore_ct: true}) {
 }
 
 function put(remote, key, value) {
-    const keys = Array.isArray(key) ? key : [key]
-    const values = Array.isArray(value) ? value : [value]
+    const keys = utils.arreturn(key)
+    const values = utils.arreturn(value)
 
     const refs = keys.map(k => generateRef(remote, k))
     const ops = refs.map((r,i) => r.set(values[i]))
@@ -44,7 +46,7 @@ function put(remote, key, value) {
 }
 
 function get(remote, key) {
-    const keys = Array.isArray(key) ? key : [key]
+    const keys = utils.arreturn(key)
     const refs = keys.map(k => generateRef(remote, k))
     return remote.readBatch(refs)
 }
