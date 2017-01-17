@@ -33,7 +33,7 @@ function getPKField(remote, table_name) {
 //
 function fetchAddPrimaryKey_T(remote, table_name, {in_tx} = {in_tx: false}) {
     const runnable = tx => {
-        return incrKey(tx, table_name).then(_ => getNextKey(tx, table_name))
+        return incrKey(tx, table_name).then(_ => getCurrentKey(tx, table_name))
     }
 
     if (in_tx) {
@@ -43,7 +43,7 @@ function fetchAddPrimaryKey_T(remote, table_name, {in_tx} = {in_tx: false}) {
     return kv.runT(remote, runnable)
 }
 
-function getNextKey(remote, table_name) {
+function getCurrentKey(remote, table_name) {
     const meta_ref = metaCont.metaRef(remote, table_name)
     const count_key = keyEncoding.encodeMetaCounter(table_name)
     return meta_ref.read().then(meta_values => {
@@ -76,6 +76,7 @@ function updateOps(meta_ref, table_name, opts) {
 
 module.exports = {
     getPKField,
+    getCurrentKey,
     fetchAddPrimaryKey_T,
 
     updateOps
