@@ -34,15 +34,13 @@ function runT(remote, fn, {ignore_ct} = {ignore_ct: true}) {
     return startT(remote).then(runnable)
 }
 
-function putPar(remote, keys, values) {
+function put(remote, key, value) {
+    const keys = Array.isArray(key) ? key : [key]
+    const values = Array.isArray(value) ? value : [value]
+
     const refs = keys.map(k => generateRef(remote, k))
     const ops = refs.map((r,i) => r.set(values[i]))
     return remote.update(ops)
-}
-
-function put(remote, key, value) {
-    const ref = generateRef(remote, key)
-    return remote.update(ref.set(value))
 }
 
 function get(remote, key) {
@@ -60,6 +58,5 @@ module.exports = {
     closeRemote,
     runT,
     get,
-    put,
-    putPar
+    put
 }

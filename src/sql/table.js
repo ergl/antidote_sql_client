@@ -43,12 +43,10 @@ function insertInto_Unsafe(remote, table, mapping) {
             return pks.fetchAddPrimaryKey_T(remote, table, {in_tx: true})
         })
     }).then(pk_value => {
-        console.log(pk_value)
         const pk_key = keyEncoding.encodePrimary(table, pk_value)
-        return kv.put(remote, pk_key, pk_value).then(_ct => {
-            const field_keys = fields.map(f => keyEncoding.encodeField(table, pk_value, f))
-            return kv.putPar(remote, field_keys, values)
-        })
+        const field_keys = fields.map(f => keyEncoding.encodeField(table, pk_value, f))
+
+        return kv.put(remote, field_keys.concat(pk_key), values.concat(pk_value))
     })
 }
 
