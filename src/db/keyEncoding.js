@@ -211,6 +211,10 @@ function decodeIndex(terms) {
     }
 }
 
+function encodeIndexPrimary(table, index, key) {
+    return concat(encodeIndex(table, index), key)
+}
+
 function decodeIndexPrimary(terms) {
     // terms should be ['name', 'index_name', 'key_name']
     if (terms.length !== 3) throw "Invalid key"
@@ -221,6 +225,10 @@ function decodeIndexPrimary(terms) {
             key_name: terms[2]
         }
     }
+}
+
+function encodeIndexField(table, index, key, field) {
+    return concat(encodeIndexPrimary(table, index, key), field)
 }
 
 function decodeIndexField(terms) {
@@ -312,7 +320,9 @@ module.exports = {
     encodeTableName,
     encodePrimary,
     encodeField,
+
     encodeIndex,
+    encodeIndexField,
 
     encodeMetaPK,
     encodeMetaFK,
