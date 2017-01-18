@@ -1,4 +1,4 @@
-const utils = require('../utils')
+const utils = require('../../utils')
 
 const metaCont = require('./metaCont')
 const keyEncoding = require('./../../db/keyEncoding')
