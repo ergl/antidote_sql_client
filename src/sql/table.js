@@ -198,6 +198,39 @@ function scan_T(remote, table, range, {in_tx} = {in_tx: false}) {
     return kv.runT(remote, runnable)
 }
 
+function quickDirtyScanIndex_T(remote, table, index_name, range, {in_tx} = {in_tx: false}) {
+    const runnable = tx => quickDirtyScanIndex_Unsafe(tx, table, index_name, range)
+
+    if (in_tx) {
+        return runnable(remote)
+    }
+
+    return kv.runT(remote, runnable)
+}
+
+function quickDirtyScanIndex_Unsafe(remote, table, index_name, range) {
+    // Assumes keys are numeric
+    const f_cutoff = indices.getIndexKey_T(remote, table, index_name, {in_tx: true}).then(m => {
+        return range.find(e => e > m)
+    })
+
+    return f_cutoff.then(cutoff => {
+        if (cutoff !== undefined) throw `Error: scan key ${cutoff} out of valid range`
+        return indices.fieldOfIndex(remote, table, index_name)
+    }).then(schema => {
+        // For every k in key range, encode k
+        const keys = utils.flatten(schema.map(f => {
+            return range.map(k => {
+                return keyEncoding.encodeIndexField(table, index_name, k, f)
+            })
+        }))
+
+        return kv.get(remote, keys)
+    })
+    // Optionally follow fks
+    // .then(fks => kv.get(remote, fks))
+}
+
 // Given a table name, and a list of primary keys, will recursively
 // retrieve all the subkeys of each key, returning a list of rows.
 //
@@ -256,5 +289,6 @@ module.exports = {
     create,
     scan_T,
     select_T,
-    insertInto_T
+    insertInto_T,
+    quickDirtyScanIndex_T
 }
