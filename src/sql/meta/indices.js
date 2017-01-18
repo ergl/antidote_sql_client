@@ -1,3 +1,5 @@
+const utils = require('./../../utils')
+
 const kv = require('./../../db/kv')
 const schema = require('./schema')
 const metaCont = require('./metaCont')
@@ -140,6 +142,17 @@ function indexOfField(remote, table_name, indexed_field) {
     })
 }
 
+function fieldOfIndex(remote, table_name, index_name) {
+    return getIndices(remote, table_name).then(indices => {
+        const matching = indices.filter(idx_t => {
+            const name = idx_t.index_name
+            return name === index_name
+        })
+
+        return utils.flatten(matching.map(({field_name}) => field_name))
+    })
+}
+
 // Given a table and an index name, checks if
 // the index references a field in that table.
 function isIndex(remote, table_name, idx_name) {
@@ -150,6 +163,7 @@ function isIndex(remote, table_name, idx_name) {
 
 module.exports = {
     isIndex,
+    fieldOfIndex,
     indexOfField,
 
     addIndex_T,
