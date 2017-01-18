@@ -67,7 +67,7 @@ function updateOps(meta_ref, table_name, {indices}) {
 function fetchAddIndexKey_T(remote, table_name, index_name, {in_tx} = {in_tx: false}) {
     const runnable = tx => {
         return incrIndexKey(tx, table_name, index_name).then(_ct => {
-            return getIndexKey_Unsafe(tx, table_name, index_name)
+            return getIndexKey_T(tx, table_name, index_name, {in_tx: true})
         })
     }
 
@@ -84,10 +84,28 @@ function incrIndexKey(remote, table_name, index_name) {
     return remote.update(ref.increment(1))
 }
 
+// See getIndexKey_Unsafe for details.
+//
+// This function will start a new transaction by default. However,
+// given that the current antidote API doesn't allow nested transactions, this function
+// must be called with `{in_tx: true}` if used inside another transaction.
+//
+function getIndexKey_T(remote, table_name, index_name, {in_tx} = {in_tx: false}) {
+    const run = tx => getIndexKey_Unsafe(tx, table_name, index_name)
+
+    if (in_tx) {
+        return run(remote)
+    }
+
+    return kv.runT(remote, run)
+}
+
 // Given an index name, and the table it references, return
 // the current index key counter value.
 //
 // Will fail if the given index name doesn't reference the given table.
+//
+// This function is unsafe. It MUST be ran inside a transaction.
 //
 function getIndexKey_Unsafe(remote, table_name, index_name) {
     return isIndex(remote, table_name, index_name).then(r => {
@@ -135,6 +153,7 @@ module.exports = {
     indexOfField,
 
     addIndex_T,
+    getIndexKey_T,
     fetchAddIndexKey_T,
 
     updateOps
