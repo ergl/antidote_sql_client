@@ -1,4 +1,4 @@
-const utils = require('../../utils/index')
+const utils = require('./../utils')
 
 const antidote_client = require('antidote_ts_client')
 
