@@ -3,6 +3,7 @@ const utils = require('../utils')
 const kv = require('../db/kv')
 const pks = require('./meta/pks')
 const _schema = require('./meta/schema')
+const indices = require('./meta/indices')
 const keyEncoding = require('../db/keyEncoding')
 const tableMetadata = require('./tableMetadata')
 
@@ -40,7 +41,7 @@ function insertInto_T(remote, name, mapping, {in_tx} = {in_tx: false}) {
 //
 // This function is unsafe. It MUST be ran inside a transaction.
 //
-// TODO: Take fks and indices into account
+// TODO: Take fks into account
 // TODO: Allow null values into the database by omitting fields
 // TODO: Support non-numeric primary key values
 function insertInto_Unsafe(remote, table, mapping) {
@@ -69,8 +70,59 @@ function insertInto_Unsafe(remote, table, mapping) {
     }).then(pk_value => {
         const pk_key = keyEncoding.encodePrimary(table, pk_value)
         const field_keys = fields.map(f => keyEncoding.encodeField(table, pk_value, f))
+        const prepare_indices = prepareBatchIndexInsert_Unsafe(remote, table, pk_value, fields)
 
-        return kv.put(remote, field_keys.concat(pk_key), values.concat(pk_value))
+        return prepare_indices.then(({keys: index_keys, values: index_values}) => {
+            return {
+                keys: field_keys.concat(pk_key).concat(index_keys),
+                values: values.concat(pk_value).concat(index_values)
+            }
+        })
+    }).then(({keys, values}) => {
+        return kv.put(remote, keys, values)
+    })
+}
+
+// For indexes:
+// When inserting, check if any of the inserted
+// fields has an index on the meta.
+// For every field f that has an index
+// index_name | (f, index_name) in meta.index
+// put(FAA_index_key(index_name)/f, key(f))
+// Depending
+// FIXME: Support indices over more than one field
+function prepareBatchIndexInsert_Unsafe(remote, table, pk, updated_fields) {
+    const update_single = f => {
+        // Get all the indices referencing this field
+        return indices.indexOfField(remote, table, f).then(to_update => {
+            const f_spec = to_update.map(idx => prepareSingleIndexInsert_Unsafe(remote, table, idx, {
+                [f]: keyEncoding.encodeField(table, pk, f)
+            }))
+
+            return Promise.all(f_spec)
+        })
+    }
+
+    const after = updated_fields.map(update_single)
+
+    return Promise.all(after).then(res => {
+        const to_update = utils.flatten(res)
+        return to_update.reduce((acc, {keys, values}) => {
+            return Object.assign(acc, {
+                keys: acc.keys.concat(keys),
+                values: acc.values.concat(values)
+            })
+        }, {keys: [], values: []})
+    })
+}
+
+function prepareSingleIndexInsert_Unsafe(remote, table, index, mapping) {
+    const fields = Object.keys(mapping)
+    const values = fields.map(f => mapping[f])
+
+    return indices.fetchAddIndexKey_T(remote, table, index, {in_tx: true}).then(pk_value => {
+        const keys = fields.map(f => keyEncoding.encodeIndexField(table, index, pk_value, f))
+        return {keys, values}
     })
 }
 
