@@ -29,7 +29,7 @@ function addIndex_T(remote, table_name, mapping, {in_tx} = {in_tx: false}) {
         return runnable(remote)
     }
 
-    return kv.runT(remote, runnable)
+    return kv.runT(remote, runnable, {ignore_ct: false}).then(({ct}) => ct)
 }
 
 // Given a table name, return a list of maps
