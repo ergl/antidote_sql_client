@@ -328,6 +328,7 @@ module.exports = {
     encodeField,
 
     encodeIndex,
+    encodeIndexPrimary,
     encodeIndexField,
 
     encodeMetaPK,
