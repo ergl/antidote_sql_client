@@ -26,7 +26,7 @@ function insertInto_T(remote, name, mapping, {in_tx} = {in_tx: false}) {
         return runnable(remote)
     }
 
-    return kv.runT(remote, runnable, {ignore_ct: false})
+    return kv.runT(remote, runnable, {ignore_ct: false}).then(({ct}) => ct)
 }
 
 // Given a table name, and a map of field names to values,
