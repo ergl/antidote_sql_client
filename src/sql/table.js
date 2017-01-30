@@ -190,8 +190,8 @@ function scan_T(remote, table, range, {in_tx} = {in_tx: false}) {
 }
 
 // TODO: Order contents for indices over more than one field
-function quickDirtyScanIndex_T(remote, table, index_name, range, {in_tx} = {in_tx: false}) {
-    const runnable = tx => quickDirtyScanIndex_Unsafe(tx, table, index_name, range)
+function scanIndex_T(remote, table, index_name, range, {in_tx} = {in_tx: false}) {
+    const runnable = tx => scanIndex_Unsafe(tx, table, index_name, range)
 
     if (in_tx) {
         return runnable(remote)
@@ -200,7 +200,7 @@ function quickDirtyScanIndex_T(remote, table, index_name, range, {in_tx} = {in_t
     return kv.runT(remote, runnable)
 }
 
-function quickDirtyScanIndex_Unsafe(remote, table, index_name, range) {
+function scanIndex_Unsafe(remote, table, index_name, range) {
     // Assumes keys are numeric
     const f_cutoff = indices.getIndexKey_T(remote, table, index_name, {in_tx: true}).then(m => {
         return range.find(e => e > m)
@@ -283,5 +283,5 @@ module.exports = {
     scan_T,
     select_T,
     insertInto_T,
-    quickDirtyScanIndex_T
+    scanIndex_T
 }
