@@ -50,13 +50,12 @@ function insertInto_Unsafe(remote, table, mapping) {
     // 3 - Inside a transaction:
     // 3.1 - encode(pk) -> pk_value
     // 3.2 - for (k, v) in schema: encode(k) -> v
-    const fields = Object.keys(mapping)
-    const values = fields.map(f => mapping[f])
+    const field_names = Object.keys(mapping)
 
     // Only support autoincrement keys, so calls to insert must not contain
     // the primary key. Hence, we fetch the primary key field name here.
     return pks.getPKField(remote, table).then(pk_field => {
-        return fields.concat(pk_field)
+        return field_names.concat(pk_field)
     }).then(schema => {
         // Inserts must specify every field, don't allow nulls by default
         // FIXME: Easily solvable by inserting a bottom value.
@@ -69,17 +68,28 @@ function insertInto_Unsafe(remote, table, mapping) {
         })
     }).then(pk_value => {
         const pk_key = keyEncoding.encodePrimary(table, pk_value)
-        const field_keys = fields.map(f => keyEncoding.encodeField(table, pk_value, f))
-        const prepare_indices = prepareBatchIndexInsert_Unsafe(remote, table, pk_value, fields)
 
-        return prepare_indices.then(({keys: index_keys, values: index_values}) => {
-            return {
-                keys: field_keys.concat(pk_key).concat(index_keys),
-                values: values.concat(pk_value).concat(index_values)
-            }
-        })
+        // Create antidote update ops for the insert operation,
+        // including the necessary ops for updating indices.
+        return prepareInsertOps_Unsafe(remote, table, pk_key, pk_value, mapping)
+
     }).then(({keys, values}) => {
         return kv.put(remote, keys, values)
+    })
+}
+
+function prepareInsertOps_Unsafe(remote, table, pk_key, pk_value, mapping) {
+    const field_names = Object.keys(mapping)
+
+    const field_keys = field_names.map(fld_name => keyEncoding.encodeField(table, pk_value, fld_name))
+    const field_values = field_names.map(k => mapping[k])
+
+    const prepare_indices = prepareIndicesInsert_Unsafe(remote, table, pk_key, field_names, field_values)
+    return prepare_indices.then(({keys: index_keys, values: index_values}) => {
+        return {
+            keys: field_keys.concat(pk_key).concat(index_keys),
+            values: field_values.concat(pk_value).concat(index_values)
+        }
     })
 }
 
@@ -89,25 +99,25 @@ function insertInto_Unsafe(remote, table, mapping) {
 // For every field f that has an index
 // index_name | (f, index_name) in meta.index
 // put(FAA_index_key(index_name)/f, key(f))
-// Depending
-// FIXME: Support indices over more than one field
-function prepareBatchIndexInsert_Unsafe(remote, table, pk, updated_fields) {
-    const update_single = f => {
-        // Get all the indices referencing this field
-        return indices.indexOfField(remote, table, f).then(to_update => {
-            const f_spec = to_update.map(idx => prepareSingleIndexInsert_Unsafe(remote, table, idx, {
-                [f]: keyEncoding.encodeField(table, pk, f)
+function prepareIndicesInsert_Unsafe(remote, table, fk, field_names, field_values) {
+    // FIXME: Support indices over more than one field
+    // Instead of `for f in updated, get index`
+    // Do `for idx in table_meta, get all_indexed_fields in updated`
+    const update_single = (field, idx) => {
+        return indices.indexOfField(remote, table, field).then(indices => {
+            const futures = indices.map(index => prepareSingleIdxInsert_Unsafe(remote, table, index, fk, {
+                [field]: field_values[idx]
             }))
 
-            return Promise.all(f_spec)
+            return Promise.all(futures)
         })
     }
 
-    const after = updated_fields.map(update_single)
+    const update_all = field_names.map(update_single)
 
-    return Promise.all(after).then(res => {
-        const to_update = utils.flatten(res)
-        return to_update.reduce((acc, {keys, values}) => {
+    return Promise.all(update_all).then(aggregate_ops_spec => {
+        const ops_spec = utils.flatten(aggregate_ops_spec)
+        return ops_spec.reduce((acc, {keys, values}) => {
             return Object.assign(acc, {
                 keys: acc.keys.concat(keys),
                 values: acc.values.concat(values)
@@ -116,13 +126,22 @@ function prepareBatchIndexInsert_Unsafe(remote, table, pk, updated_fields) {
     })
 }
 
-function prepareSingleIndexInsert_Unsafe(remote, table, index, mapping) {
-    const fields = Object.keys(mapping)
-    const values = fields.map(f => mapping[f])
+// prepareSingle(_, table, index, orig_pk, kv_map) will
+// pk <- faa(_, table, index)
+// encode(table, index, pk) -> orig_pk
+// for k, v in kv_map
+// encode(table, index, pk, k) -> v
+function prepareSingleIdxInsert_Unsafe(remote, table, index, fk, kv_mapping) {
+    const field_names = Object.keys(kv_mapping)
+    const field_values = field_names.map(f => kv_mapping[f])
 
-    return indices.fetchAddIndexKey_T(remote, table, index, {in_tx: true}).then(pk_value => {
-        const keys = fields.map(f => keyEncoding.encodeIndexField(table, index, pk_value, f))
-        return {keys, values}
+    return indices.fetchAddIndexKey_T(remote, table, index, {in_tx: true}).then(fresh_key => {
+        const pk = keyEncoding.encodeIndexPrimary(table, index, fresh_key)
+        const field_keys = field_names.map(f => keyEncoding.encodeIndexField(table, index, fresh_key, f))
+        return {
+            keys: field_keys.concat(pk),
+            values: field_values.concat(fk)
+        }
     })
 }
 
@@ -217,18 +236,19 @@ function quickDirtyScanIndex_Unsafe(remote, table, index_name, range) {
     return f_cutoff.then(cutoff => {
         if (cutoff !== undefined) throw `Error: scan key ${cutoff} out of valid range`
         return indices.fieldOfIndex(remote, table, index_name)
-    }).then(schema => {
+    }).then(indexed_fields_names => {
         // For every k in key range, encode k
-        const keys = utils.flatten(schema.map(f => {
+        const keys = utils.flatten(indexed_fields_names.map(f => {
             return range.map(k => {
+                // FIXME: Right now we're getting only the value, at this key
+                // The key encodeIndexPrimary(table, index_name, k) points to the
+                // pk key of those fields. Follow that if we need a join
                 return keyEncoding.encodeIndexField(table, index_name, k, f)
             })
         }))
 
         return kv.get(remote, keys)
     })
-    // Optionally follow fks
-    // .then(fks => kv.get(remote, fks))
 }
 
 // Given a table name, and a list of primary keys, will recursively
