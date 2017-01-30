@@ -1,3 +1,5 @@
+const utils = require('../../utils')
+
 const metaCont = require('./metaCont')
 const keyEncoding = require('./../../db/keyEncoding')
 
@@ -22,7 +24,7 @@ function validateSchema(remote, table_name, schema) {
 // Check if the given field list is a subset of the
 // schema of the given table name
 function validateSchemaSubset(remote, table_name, field) {
-    const fields = Array.isArray(field) ? field : [field]
+    const fields = utils.arreturn(field)
     return getSchema(remote, table_name).then(sch => {
         return fields.every(f => sch.includes(f))
     })

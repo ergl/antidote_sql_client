@@ -1,3 +1,5 @@
+const utils = require('./../utils')
+
 const metaCont = require('./meta/metaCont')
 
 const pks = require('./meta/pks')
@@ -25,14 +27,7 @@ function aggregateOps(remote, table_name, pk_field, schema_map) {
         })
     })
 
-    return flatten(nested_ops)
-}
-
-// Because, apparently, JS doesn't have Array.flatten ???
-function flatten(arr) {
-    return arr.reduce((a, b) => {
-        return a.concat(Array.isArray(b) ? flatten(b) : b)
-    }, [])
+    return utils.flatten(nested_ops)
 }
 
 module.exports = {

@@ -1,3 +1,5 @@
+const utils = require('./../utils')
+
 const antidote_client = require('antidote_ts_client')
 
 function createRemote(port, url, opts = {bucket: "default-bucket"}) {
@@ -34,19 +36,40 @@ function runT(remote, fn, {ignore_ct} = {ignore_ct: true}) {
     return startT(remote).then(runnable)
 }
 
-function putPar(remote, keys, values) {
+function put(remote, key, value) {
+    const keys = utils.arreturn(key)
+    const values = utils.arreturn(value)
+
     const refs = keys.map(k => generateRef(remote, k))
     const ops = refs.map((r,i) => r.set(values[i]))
     return remote.update(ops)
 }
 
-function put(remote, key, value) {
-    const ref = generateRef(remote, key)
-    return remote.update(ref.set(value))
+// condPut(_, k, v, e) will succeed iff get(_, k) = e
+function condPut(remote, key, value, expected) {
+    const run = tx => {
+        return get(tx, key).then(vs => {
+            const exp = utils.arreturn(expected)
+
+            if (exp.length !== vs.length) {
+                throw `ConditionalPut failed, expected ${expected}, got ${vs}`
+            }
+
+            const equals = exp.every((elt, idx) => elt === vs[idx])
+            if (!equals) {
+                throw `Condional put failed, expected ${expected}, got ${vs}`
+            }
+
+            return put(tx, key, value)
+        })
+    }
+
+    // Only care about commit time
+    return runT(remote, run, {ignore_ct: false}).then(({ct}) => ct)
 }
 
 function get(remote, key) {
-    const keys = Array.isArray(key) ? key : [key]
+    const keys = utils.arreturn(key)
     const refs = keys.map(k => generateRef(remote, k))
     return remote.readBatch(refs)
 }
@@ -61,5 +84,5 @@ module.exports = {
     runT,
     get,
     put,
-    putPar
+    condPut
 }

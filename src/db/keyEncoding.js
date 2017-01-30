@@ -171,7 +171,7 @@ function encodePrimary(table, key) {
 
 function decodePrimary(terms) {
     // terms should be ['name', keyPrefix, 'key_name']
-    if (terms.length !== 3) throw "Invalid key"
+    if (terms.length !== 3) throw invalid(terms)
     return {
         pk: {
             table_name: terms[0],
@@ -186,7 +186,7 @@ function encodeField(table, key, field) {
 
 function decodeField(terms) {
     // terms should be ['name', keyPrefix, 'key_name', 'field_name']
-    if (terms.length !== 4) throw "Invalid key"
+    if (terms.length !== 4) throw invalid(terms)
     return {
         field: {
             table_name: terms[0],
@@ -202,7 +202,7 @@ function encodeIndex(table, index_name) {
 
 function decodeIndex(terms) {
     // terms should be ['name', 'index_name']
-    if (terms.length !== 2) throw "Invalid key"
+    if (terms.length !== 2) throw invalid(terms)
     return {
         index: {
             table_name: terms[0],
@@ -211,9 +211,13 @@ function decodeIndex(terms) {
     }
 }
 
+function encodeIndexPrimary(table, index, key) {
+    return concat(encodeIndex(table, index), key)
+}
+
 function decodeIndexPrimary(terms) {
     // terms should be ['name', 'index_name', 'key_name']
-    if (terms.length !== 3) throw "Invalid key"
+    if (terms.length !== 3) throw invalid(terms)
     return {
         index_pk: {
             table_name: terms[0],
@@ -223,9 +227,13 @@ function decodeIndexPrimary(terms) {
     }
 }
 
+function encodeIndexField(table, index, key, field) {
+    return concat(encodeIndexPrimary(table, index, key), field)
+}
+
 function decodeIndexField(terms) {
     // terms should be ['name', 'index_name', 'key_name', 'field_name']
-    if (terms.length !== 4) throw "Invalid key"
+    if (terms.length !== 4) throw invalid(terms)
     return {
         index_field: {
             table_name: terms[0],
@@ -237,6 +245,8 @@ function decodeIndexField(terms) {
 }
 
 function decode(key) {
+    if (typeof(key) !== 'string') throw invalid(key)
+
     const parts = key.split(prefixSep)
     const length = parts.length
 
@@ -267,10 +277,10 @@ function decode(key) {
                     return decodeMetaFK(meta_parts[0])
                 }
 
-                throw "Invalid key"
+                throw invalid(key)
             }
 
-            throw "Invalid key"
+            throw invalid(key)
         }
 
         return decodeTableName(term)
@@ -282,7 +292,7 @@ function decode(key) {
         if (is_index) {
             return decodeIndex(parts)
         } else {
-            throw "Invalid key"
+            throw invalid(key)
         }
     }
 
@@ -302,7 +312,11 @@ function decode(key) {
         return decodeField(parts)
     }
 
-    throw "Invalid key"
+    throw invalid(key)
+}
+
+function invalid(key) {
+    return `Invalid key ${key}`
 }
 
 module.exports = {
@@ -312,7 +326,10 @@ module.exports = {
     encodeTableName,
     encodePrimary,
     encodeField,
+
     encodeIndex,
+    encodeIndexPrimary,
+    encodeIndexField,
 
     encodeMetaPK,
     encodeMetaFK,
