@@ -15,8 +15,9 @@ const keyEncoding = require('./../../db/keyEncoding')
 // given that the current antidote API doesn't allow nested transactions, this function
 // must be called with `{in_tx: true}` if used inside another transaction.
 //
-function addIndex_T(remote, table_name, {index_name, field_names}, {in_tx} = {in_tx: false}) {
+function addIndex_T(remote, table_name, {index_name, field_names: field_name}, {in_tx} = {in_tx: false}) {
     const runnable = tx => {
+        const field_names = utils.arreturn(field_name)
         return schema.validateSchemaSubset(remote, table_name, field_names).then(r => {
             if (!r) throw "Can't add index on non-existent fields"
 
@@ -130,14 +131,14 @@ function generateIndexRef(remote, table_name, index_name) {
     return remote.counter(keyEncoding.encodeIndex(table_name, index_name))
 }
 
-// Given a table name and one of its field, return a list of indexes,
+// Given a table name and one of its fields, return a list of indexes,
 // or the empty list if no indices are found.
 function indexOfField(remote, table_name, indexed_field) {
     return getIndices(remote, table_name).then(indices => {
 
         // Same as filter(f => f.field_name === indexed_field).map(f => f.index_name)
-        const match_index = (acc, {field_name, index_name}) => {
-            if (field_name === indexed_field) {
+        const match_index = (acc, {index_name, field_names}) => {
+            if (field_names.includes(indexed_field)) {
                 return acc.concat(index_name)
             }
 
@@ -155,7 +156,7 @@ function fieldsOfIndex(remote, table_name, index_name) {
             return name === index_name
         })
 
-        return utils.flatten(matching.map(({field_name}) => field_name))
+        return utils.flatten(matching.map(({field_names}) => field_names))
     })
 }
 
