@@ -45,6 +45,29 @@ function put(remote, key, value) {
     return remote.update(ops)
 }
 
+// condPut(_, k, v, e) will succeed iff get(_, k) = e
+function condPut(remote, key, value, expected) {
+    const run = tx => {
+        return get(tx, key).then(vs => {
+            const exp = utils.arreturn(expected)
+
+            if (exp.length !== vs.length) {
+                throw `ConditionalPut failed, expected ${expected}, got ${vs}`
+            }
+
+            const equals = exp.every((elt, idx) => elt === vs[idx])
+            if (!equals) {
+                throw `Condional put failed, expected ${expected}, got ${vs}`
+            }
+
+            return put(tx, key, value)
+        })
+    }
+
+    // Only care about commit time
+    return runT(remote, run, {ignore_ct: false}).then(({ct}) => ct)
+}
+
 function get(remote, key) {
     const keys = utils.arreturn(key)
     const refs = keys.map(k => generateRef(remote, k))
@@ -60,5 +83,6 @@ module.exports = {
     closeRemote,
     runT,
     get,
-    put
+    put,
+    condPut
 }

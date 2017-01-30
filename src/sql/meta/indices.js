@@ -5,22 +5,29 @@ const schema = require('./schema')
 const metaCont = require('./metaCont')
 const keyEncoding = require('./../../db/keyEncoding')
 
-// Given a table name, and a map `{field_name, index_name}`,
+// Given a table name, and a map `{index_name, field_names}`,
 // create a new index named `index_name` over `table.field_name`
 //
-// Will fail if the given field name doesn't exist inside the table schema.
+// Will fail if the given field name doesn't exist inside the table schema, or
+// if the given index already exists on this table.
 //
 // This function will start a new transaction by default. However,
 // given that the current antidote API doesn't allow nested transactions, this function
 // must be called with `{in_tx: true}` if used inside another transaction.
 //
-function addIndex_T(remote, table_name, mapping, {in_tx} = {in_tx: false}) {
+function addIndex_T(remote, table_name, {index_name, field_names: field_name}, {in_tx} = {in_tx: false}) {
     const runnable = tx => {
-        return schema.validateSchemaSubset(remote, table_name, mapping.field_name).then(r => {
-            if (!r) throw "Can't add index on non-existent field"
+        const field_names = utils.arreturn(field_name)
+        return schema.validateSchemaSubset(remote, table_name, field_names).then(r => {
+            if (!r) throw "Can't add index on non-existent fields"
 
             return getIndices(tx, table_name).then(index_table => {
-                return setIndex(tx, table_name, index_table.concat(mapping))
+                const names = index_table.map(st => st.index_name)
+                if (names.includes(index_name)) {
+                    throw `Can't override index ${index_name}`
+                }
+
+                return setIndex(tx, table_name, index_table.concat({index_name, field_names}))
             })
         })
     }
@@ -29,7 +36,7 @@ function addIndex_T(remote, table_name, mapping, {in_tx} = {in_tx: false}) {
         return runnable(remote)
     }
 
-    return kv.runT(remote, runnable)
+    return kv.runT(remote, runnable, {ignore_ct: false}).then(({ct}) => ct)
 }
 
 // Given a table name, return a list of maps
@@ -124,14 +131,14 @@ function generateIndexRef(remote, table_name, index_name) {
     return remote.counter(keyEncoding.encodeIndex(table_name, index_name))
 }
 
-// Given a table name and one of its field, return a list of indexes,
+// Given a table name and one of its fields, return a list of indexes,
 // or the empty list if no indices are found.
 function indexOfField(remote, table_name, indexed_field) {
     return getIndices(remote, table_name).then(indices => {
 
         // Same as filter(f => f.field_name === indexed_field).map(f => f.index_name)
-        const match_index = (acc, {field_name, index_name}) => {
-            if (field_name === indexed_field) {
+        const match_index = (acc, {index_name, field_names}) => {
+            if (field_names.includes(indexed_field)) {
                 return acc.concat(index_name)
             }
 
@@ -142,14 +149,57 @@ function indexOfField(remote, table_name, indexed_field) {
     })
 }
 
-function fieldOfIndex(remote, table_name, index_name) {
+function fieldsOfIndex(remote, table_name, index_name) {
     return getIndices(remote, table_name).then(indices => {
         const matching = indices.filter(idx_t => {
             const name = idx_t.index_name
             return name === index_name
         })
 
-        return utils.flatten(matching.map(({field_name}) => field_name))
+        return utils.flatten(matching.map(({field_names}) => field_names))
+    })
+}
+
+// See correlateIndices_T for details.
+//
+// This function will start a new transaction by default. However,
+// given that the current antidote API doesn't allow nested transactions, this function
+// must be called with `{in_tx: true}` if used inside another transaction.
+//
+function correlateIndices_T(remote, table_name, field_names, {in_tx} = {in_tx: false}) {
+    const run = tx => correlateIndices_Unsafe(tx, table_name, field_names)
+
+    if (in_tx) {
+        return run(remote)
+    }
+
+    return kv.runT(remote, run)
+}
+
+// Given a table name, and a list of field names, return a list of the indices
+// on any of the fields, in the form [ {index_name, field_names} ].
+//
+// Whereas `indexOfField` only returns the index name, this function will also return
+// all the fields of the index.
+//
+// This function is unsafe. It MUST be ran inside a transaction.
+//
+function correlateIndices_Unsafe(remote, table_name, field_name) {
+    const field_names = utils.arreturn(field_name)
+
+    const promises = field_names.map(f => indexOfField(remote, table_name, f))
+    return Promise.all(promises).then(results => {
+        // Flatten and remove duplicates
+        const indices = utils.squash(utils.flatten(results))
+        const correlate = (index_name, field_names) => {
+            return {index_name: index_name, field_names}
+        }
+
+        const promises = indices.map(index => {
+            return fieldsOfIndex(remote, table_name, index).then(fields => correlate(index, fields))
+        })
+
+        return Promise.all(promises)
     })
 }
 
@@ -163,12 +213,14 @@ function isIndex(remote, table_name, idx_name) {
 
 module.exports = {
     isIndex,
-    fieldOfIndex,
+    fieldsOfIndex,
     indexOfField,
 
     addIndex_T,
     getIndexKey_T,
     fetchAddIndexKey_T,
+
+    correlateIndices_T,
 
     updateOps
 }
