@@ -10,6 +10,12 @@ function flatten(arr) {
     }, [])
 }
 
+// Remove duplicates off an array
+function squash(arr) {
+    return [...new Set(arr)]
+}
+
+
 function mapOKeys(obj, fn) {
     const old_keys = Object.keys(obj)
     return old_keys.reduce((acc, curr_key) => {
@@ -37,6 +43,7 @@ function mapO(obj, fn) {
 }
 
 module.exports = {
+    squash,
     flatten,
     arreturn,
 

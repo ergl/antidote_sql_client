@@ -160,6 +160,49 @@ function fieldsOfIndex(remote, table_name, index_name) {
     })
 }
 
+// See correlateIndices_T for details.
+//
+// This function will start a new transaction by default. However,
+// given that the current antidote API doesn't allow nested transactions, this function
+// must be called with `{in_tx: true}` if used inside another transaction.
+//
+function correlateIndices_T(remote, table_name, field_names, {in_tx} = {in_tx: false}) {
+    const run = tx => correlateIndices_Unsafe(tx, table_name, field_names)
+
+    if (in_tx) {
+        return run(remote)
+    }
+
+    return kv.runT(remote, run)
+}
+
+// Given a table name, and a list of field names, return a list of the indices
+// on any of the fields, in the form [ {index_name, field_names} ].
+//
+// Whereas `indexOfField` only returns the index name, this function will also return
+// all the fields of the index.
+//
+// This function is unsafe. It MUST be ran inside a transaction.
+//
+function correlateIndices_Unsafe(remote, table_name, field_name) {
+    const field_names = utils.arreturn(field_name)
+
+    const promises = field_names.map(f => indexOfField(remote, table_name, f))
+    return Promise.all(promises).then(results => {
+        // Flatten and remove duplicates
+        const indices = utils.squash(utils.flatten(results))
+        const correlate = (index_name, field_names) => {
+            return {index_name: index_name, field_names}
+        }
+
+        const promises = indices.map(index => {
+            return fieldsOfIndex(remote, table_name, index).then(fields => correlate(index, fields))
+        })
+
+        return Promise.all(promises)
+    })
+}
+
 // Given a table and an index name, checks if
 // the index references a field in that table.
 function isIndex(remote, table_name, idx_name) {
@@ -176,6 +219,8 @@ module.exports = {
     addIndex_T,
     getIndexKey_T,
     fetchAddIndexKey_T,
+
+    correlateIndices_T,
 
     updateOps
 }
