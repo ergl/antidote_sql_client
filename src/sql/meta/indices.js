@@ -148,7 +148,7 @@ function indexOfField(remote, table_name, indexed_field) {
     })
 }
 
-function fieldOfIndex(remote, table_name, index_name) {
+function fieldsOfIndex(remote, table_name, index_name) {
     return getIndices(remote, table_name).then(indices => {
         const matching = indices.filter(idx_t => {
             const name = idx_t.index_name
@@ -169,7 +169,7 @@ function isIndex(remote, table_name, idx_name) {
 
 module.exports = {
     isIndex,
-    fieldOfIndex,
+    fieldsOfIndex,
     indexOfField,
 
     addIndex_T,

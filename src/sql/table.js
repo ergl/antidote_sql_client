@@ -235,7 +235,7 @@ function quickDirtyScanIndex_Unsafe(remote, table, index_name, range) {
 
     return f_cutoff.then(cutoff => {
         if (cutoff !== undefined) throw `Error: scan key ${cutoff} out of valid range`
-        return indices.fieldOfIndex(remote, table, index_name)
+        return indices.fieldsOfIndex(remote, table, index_name)
     }).then(indexed_fields_names => {
         // For every k in key range, encode k
         const keys = utils.flatten(indexed_fields_names.map(f => {
