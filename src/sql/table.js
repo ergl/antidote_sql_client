@@ -189,7 +189,6 @@ function scan_T(remote, table, range, {in_tx} = {in_tx: false}) {
     return kv.runT(remote, runnable)
 }
 
-// TODO: Order contents for indices over more than one field
 function scanIndex_T(remote, table, index_name, range, {in_tx} = {in_tx: false}) {
     const runnable = tx => scanIndex_Unsafe(tx, table, index_name, range)
 
@@ -211,8 +210,8 @@ function scanIndex_Unsafe(remote, table, index_name, range) {
         return indices.fieldsOfIndex(remote, table, index_name)
     }).then(indexed_fields_names => {
         // For every k in key range, encode k
-        const keys = utils.flatten(indexed_fields_names.map(f => {
-            return range.map(k => {
+        const keys = utils.flatten(range.map(k => {
+            return indexed_fields_names.map(f => {
                 // FIXME: Right now we're getting only the value, at this key
                 // The key encodeIndexPrimary(table, index_name, k) points to the
                 // pk key of those fields. Follow that if we need a join
