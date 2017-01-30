@@ -5,22 +5,28 @@ const schema = require('./schema')
 const metaCont = require('./metaCont')
 const keyEncoding = require('./../../db/keyEncoding')
 
-// Given a table name, and a map `{field_name, index_name}`,
+// Given a table name, and a map `{index_name, field_names}`,
 // create a new index named `index_name` over `table.field_name`
 //
-// Will fail if the given field name doesn't exist inside the table schema.
+// Will fail if the given field name doesn't exist inside the table schema, or
+// if the given index already exists on this table.
 //
 // This function will start a new transaction by default. However,
 // given that the current antidote API doesn't allow nested transactions, this function
 // must be called with `{in_tx: true}` if used inside another transaction.
 //
-function addIndex_T(remote, table_name, mapping, {in_tx} = {in_tx: false}) {
+function addIndex_T(remote, table_name, {index_name, field_names}, {in_tx} = {in_tx: false}) {
     const runnable = tx => {
-        return schema.validateSchemaSubset(remote, table_name, mapping.field_name).then(r => {
-            if (!r) throw "Can't add index on non-existent field"
+        return schema.validateSchemaSubset(remote, table_name, field_names).then(r => {
+            if (!r) throw "Can't add index on non-existent fields"
 
             return getIndices(tx, table_name).then(index_table => {
-                return setIndex(tx, table_name, index_table.concat(mapping))
+                const names = index_table.map(st => st.index_name)
+                if (names.includes(index_name)) {
+                    throw `Can't override index ${index_name}`
+                }
+
+                return setIndex(tx, table_name, index_table.concat({index_name, field_names}))
             })
         })
     }
