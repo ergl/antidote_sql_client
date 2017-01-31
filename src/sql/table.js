@@ -258,18 +258,18 @@ function scan_Unsafe(remote, table, range) {
             return Promise.all([f_pk_field, f_non_pk_fields]).then(([pk_field, fields]) => {
                 const field_keys = fields.map(f => keyEncoding.encodeField(table, range[idx], f))
                 // After encoding all fields, we append the pk key/field to the range we want to scan
-                return scanFields(remote, field_keys.concat(key), fields.concat(pk_field))
+                return scanRow(remote, field_keys.concat(key), fields.concat(pk_field))
             })
         })
 
-        // Execute all scanFields calls in parallel
+        // Execute all scanRow calls in parallel
         return Promise.all(f_results)
     })
 }
 
 // Given a list of encoded keys, and a matching list of field names,
 // build an object s.t. `{f: get(k)}` for every k in field_keys, f in fields
-function scanFields(remote, field_keys, fields) {
+function scanRow(remote, field_keys, fields) {
     return kv.get(remote, field_keys).then(values => {
         return values.reduce((acc, val, idx) => {
             const field_name = fields[idx]
