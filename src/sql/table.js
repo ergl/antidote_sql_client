@@ -7,7 +7,8 @@ const indices = require('./meta/indices')
 const keyEncoding = require('../db/keyEncoding')
 const tableMetadata = require('./tableMetadata')
 
-// TODO: Support user-defined primary keys
+// TODO: Support user-defined primary keys (and non-numeric)
+// TODO: Allow null values into the database by omitting fields
 function create(remote, name, schema) {
     // Pick the head of the schema as an autoincremented primary key
     return tableMetadata.createMeta(remote, name, schema[0], schema)
@@ -42,8 +43,6 @@ function insertInto_T(remote, name, mapping, {in_tx} = {in_tx: false}) {
 // This function is unsafe. It MUST be ran inside a transaction.
 //
 // TODO: Take fks into account
-// TODO: Allow null values into the database by omitting fields
-// TODO: Support non-numeric primary key values
 function insertInto_Unsafe(remote, table, mapping) {
     // 1 - Check schema is correct. If it's not, throw
     // 2 - Get new pk value by reading the meta keyrange (incrAndGet)
@@ -54,11 +53,13 @@ function insertInto_Unsafe(remote, table, mapping) {
 
     // Only support autoincrement keys, so calls to insert must not contain
     // the primary key. Hence, we fetch the primary key field name here.
+    // TODO: When adding user-defined PKs, change this
     return pks.getPKField(remote, table).then(pk_field => {
         return field_names.concat(pk_field)
     }).then(schema => {
         // Inserts must specify every field, don't allow nulls by default
-        // FIXME: Easily solvable by inserting a bottom value.
+        // Easily solvable by inserting a bottom value.
+        // TODO: Add bottom value for nullable fields
         return _schema.validateSchema(remote, table, schema).then(r => {
             if (!r) throw "Invalid schema"
 
