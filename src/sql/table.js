@@ -66,7 +66,7 @@ function insertInto_Unsafe(remote, table, mapping) {
         return _schema.validateSchema(remote, table, schema).then(r => {
             if (!r) throw "Invalid schema"
 
-            return checkFks_Unsafe(remote, table, mapping)
+            return checkFKs_Unsafe(remote, table, mapping)
         })
     }).then(valid_fks => {
         if (!valid_fks) throw 'FK constraint failed'
@@ -95,7 +95,7 @@ function insertInto_Unsafe(remote, table, mapping) {
 //
 // This function is unsafe. It MUST be ran inside a transaction.
 //
-function checkFks_Unsafe(remote, table, mapping) {
+function checkFKs_Unsafe(remote, table, mapping) {
     const field_names = Object.keys(mapping)
     const correlated = fks.correlateFKs_T(remote, table, field_names, {in_tx: true})
 
