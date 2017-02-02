@@ -102,11 +102,45 @@ function isFK(remote, table_name, field) {
     return getFKs(remote, table_name, field).then(r => r.length !== 0)
 }
 
+// See correlateIndices_T for details.
+//
+// This function will start a new transaction by default. However,
+// given that the current antidote API doesn't allow nested transactions, this function
+// must be called with `{in_tx: true}` if used inside another transaction.
+//
+function correlateFKs_T(remote, table_name, field_names, {in_tx} = {in_tx: false}) {
+    const run = tx => correlateFKs_Unsafe(tx, table_name, field_names)
+
+    if (in_tx) {
+        return run(remote)
+    }
+
+    return kv.runT(remote, run)
+}
+
+// Given a table name, and a list of field names, return a list of the foreign key structure
+// for any of the fields, in the form [ {reference_table, field_name} ].
+//
+// Whereas `getForeignTable` only returns the reference table, this function will also return
+// the name of the field.
+//
+// This function is unsafe. It MUST be ran inside a transaction.
+//
+function correlateFKs_Unsafe(remote, table_name, field_name) {
+    const field_names = utils.arreturn(field_name)
+    return getFKs(remote, table_name).then(fks => {
+        return fks.filter(({field_name}) => {
+            return field_names.includes(field_name)
+        })
+    })
+}
+
 module.exports = {
     isFK,
     getForeignTable,
 
     addFK_T,
+    correlateFKs_T,
 
     updateOps
 }

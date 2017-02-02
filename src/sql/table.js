@@ -1,13 +1,17 @@
+const assert = require('assert')
+
 const utils = require('../utils')
 
 const kv = require('../db/kv')
 const pks = require('./meta/pks')
+const fks = require('./meta/fks')
 const _schema = require('./meta/schema')
 const indices = require('./meta/indices')
 const keyEncoding = require('../db/keyEncoding')
 const tableMetadata = require('./tableMetadata')
 
-// TODO: Support user-defined primary keys
+// TODO: Support user-defined primary keys (and non-numeric)
+// TODO: Allow null values into the database by omitting fields
 function create(remote, name, schema) {
     // Pick the head of the schema as an autoincremented primary key
     return tableMetadata.createMeta(remote, name, schema[0], schema)
@@ -41,32 +45,36 @@ function insertInto_T(remote, name, mapping, {in_tx} = {in_tx: false}) {
 //
 // This function is unsafe. It MUST be ran inside a transaction.
 //
-// TODO: Take fks into account
-// TODO: Allow null values into the database by omitting fields
-// TODO: Support non-numeric primary key values
 function insertInto_Unsafe(remote, table, mapping) {
     // 1 - Check schema is correct. If it's not, throw
     // 2 - Get new pk value by reading the meta keyrange (incrAndGet)
     // 3 - Inside a transaction:
     // 3.1 - encode(pk) -> pk_value
     // 3.2 - for (k, v) in schema: encode(k) -> v
-    const field_names = Object.keys(mapping)
 
     // Only support autoincrement keys, so calls to insert must not contain
     // the primary key. Hence, we fetch the primary key field name here.
+    // TODO: When adding user-defined PKs, change this
     return pks.getPKField(remote, table).then(pk_field => {
+        const field_names = Object.keys(mapping)
         return field_names.concat(pk_field)
     }).then(schema => {
         // Inserts must specify every field, don't allow nulls by default
-        // FIXME: Easily solvable by inserting a bottom value.
+        // Easily solvable by inserting a bottom value.
+        // TODO: Add bottom value for nullable fields
         return _schema.validateSchema(remote, table, schema).then(r => {
             if (!r) throw "Invalid schema"
 
-            // We MUST be inside a transaction, so the call
-            // to `fetchAddPrimaryKey_T` MUST NOT spawn a new transaction.
-            return pks.fetchAddPrimaryKey_T(remote, table, {in_tx: true})
+            return swapFKReferences_Unsafe(remote, table, mapping)
         })
-    }).then(pk_value => {
+    }).then(({valid, result}) => {
+        if (!valid) throw 'FK constraint failed'
+        // We MUST be inside a transaction, so the call
+        // to `fetchAddPrimaryKey_T` MUST NOT spawn a new transaction.
+        const f_pk_value = pks.fetchAddPrimaryKey_T(remote, table, { in_tx: true })
+        return f_pk_value.then(pk_value => ({ pk_value, result }))
+    }).then(({pk_value, result}) => {
+        const field_names = Object.keys(result)
         const pk_key = keyEncoding.encodePrimary(table, pk_value)
         const field_keys = field_names.map(f => keyEncoding.encodeField(table, pk_value, f))
         const field_values = field_names.map(f => mapping[f])
@@ -76,6 +84,70 @@ function insertInto_Unsafe(remote, table, mapping) {
 
         return kv.put(remote, keys, values).then(_ => {
             return updateIndices(remote, table, pk_key, mapping)
+        })
+    })
+}
+
+// Given a table, and a map of updated field names to their values,
+// check if the new values satisfy foreign key constraints, following that:
+//
+// - A value X may only be inserted into the child column if X also exists in the parent column.
+// - A value X in a child column may only be updated to a value Y if Y exists in the parent column.
+//
+// If both conditions are met, return { valid: bool, result: mapping } where result represents the new
+// mapping of fields -> values to be inserted in the database. Foreign keys are represented as pointers
+// to the actual value they reference, obviating extra work during updates at the cost of an extra `get`
+// off the database when reading that field.
+//
+// This function is unsafe. It MUST be ran inside a transaction.
+//
+function swapFKReferences_Unsafe(remote, table, mapping) {
+    const field_names = Object.keys(mapping)
+    const correlated = fks.correlateFKs_T(remote, table, field_names, {in_tx: true})
+
+    // TODO: Valid for now, change if primary keys are user defined, and / or when fks
+    // may point to arbitrary fields
+    //
+    // Foreign keys may be only created against primary keys, not arbitrary fields
+    // And given that primary keys are only autoincremented, and the database is append-only
+    // We can check if a specific row exists by checking it its less or equal to the keyrange
+    // The actual logic for the cutoff is implemented inside select_T
+    return correlated.then(relation => {
+        const valid_checks = relation.map(({reference_table, field_name}) => {
+            const range = mapping[field_name]
+            const f_select = select_T(remote, reference_table, field_name, range, {in_tx: true})
+            const valid = f_select.then(row => {
+                assert(row.length === 1)
+                const value = row[0][field_name]
+                return value === mapping[field_name]
+            }).catch(cutoff_error => {
+                console.log(cutoff_error)
+                return false
+            })
+
+            return valid.then(v => {
+                if (!v) throw 'FK constraint failed'
+                return {
+                    k: field_name,
+                    v: keyEncoding.encodePrimary(table, mapping[field_name])
+                }
+            })
+        })
+
+        return Promise.all(valid_checks).then(to_swap => {
+            const swapped = to_swap.reduce((acc, {k, v}) => {
+                return Object.assign(acc, {[k]: v})
+            }, mapping)
+
+            return {
+                valid: true,
+                result: swapped
+            }
+        }).catch(_ => {
+            return {
+                valid: false,
+                result: undefined
+            }
         })
     })
 }
@@ -257,18 +329,18 @@ function scan_Unsafe(remote, table, range) {
             return Promise.all([f_pk_field, f_non_pk_fields]).then(([pk_field, fields]) => {
                 const field_keys = fields.map(f => keyEncoding.encodeField(table, range[idx], f))
                 // After encoding all fields, we append the pk key/field to the range we want to scan
-                return scanFields(remote, field_keys.concat(key), fields.concat(pk_field))
+                return scanRow(remote, field_keys.concat(key), fields.concat(pk_field))
             })
         })
 
-        // Execute all scanFields calls in parallel
+        // Execute all scanRow calls in parallel
         return Promise.all(f_results)
     })
 }
 
 // Given a list of encoded keys, and a matching list of field names,
 // build an object s.t. `{f: get(k)}` for every k in field_keys, f in fields
-function scanFields(remote, field_keys, fields) {
+function scanRow(remote, field_keys, fields) {
     return kv.get(remote, field_keys).then(values => {
         return values.reduce((acc, val, idx) => {
             const field_name = fields[idx]

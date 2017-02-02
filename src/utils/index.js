@@ -35,10 +35,7 @@ function mapOValues(obj, fn) {
 
 function mapO(obj, fn) {
     return Object.keys(obj).reduce((acc, curr_key) => {
-        const [new_k, new_v] = fn(curr_key, obj[curr_key])
-        return Object.assign(acc, {
-            [new_k]: new_v
-        })
+        return Object.assign(acc, fn(curr_key, obj[curr_key]))
     }, {})
 }
 
