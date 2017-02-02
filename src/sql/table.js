@@ -45,7 +45,6 @@ function insertInto_T(remote, name, mapping, {in_tx} = {in_tx: false}) {
 //
 // This function is unsafe. It MUST be ran inside a transaction.
 //
-// TODO: Take fks into account
 function insertInto_Unsafe(remote, table, mapping) {
     // 1 - Check schema is correct. If it's not, throw
     // 2 - Get new pk value by reading the meta keyrange (incrAndGet)
