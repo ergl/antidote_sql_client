@@ -11,16 +11,11 @@ const keyEncoding = require('./../../db/keyEncoding');
 // Will fail if the given field name doesn't exist inside the table schema, or
 // if the given index already exists on this table.
 //
-// This function will start a new transaction by default. However,
-// given that the current antidote API doesn't allow nested transactions, this function
-// must be called with `{in_tx: true}` if used inside another transaction.
+// This function will start a new transaction by default, unless called from inside
+// another transaction (given that the current API doesn't allow nested transaction).
+// In that case, all operations will be executed in the current transaction.
 //
-function addIndex_T(
-    remote,
-    table_name,
-    { index_name, field_names: field_name },
-    { in_tx } = { in_tx: false }
-) {
+function addIndex_T(remote, table_name, { index_name, field_names: field_name }) {
     const runnable = tx => {
         const field_names = utils.arreturn(field_name);
         return schema.validateSchemaSubset(remote, table_name, field_names).then(r => {
@@ -41,11 +36,7 @@ function addIndex_T(
         });
     };
 
-    if (in_tx) {
-        return runnable(remote);
-    }
-
-    return kv.runT(remote, runnable, { ignore_ct: false }).then(({ ct }) => ct);
+    return kv.runT(remote, runnable);
 }
 
 // Given a table name, return a list of maps
@@ -79,29 +70,18 @@ function updateOps(meta_ref, table_name, { indices }) {
 // Given an index name, and the table it references, perform
 // a fetch-and-add on its key counter reference, and return the new value.
 //
-// To perform FAA atomically, this function must start a new transaction. However,
-// given that the current antidote API doesn't allow nested transactions, this function
-// must be called with `{in_tx: true}` if used inside another transaction.
+// This function will start a new transaction by default, unless called from inside
+// another transaction (given that the current API doesn't allow nested transaction).
+// In that case, all operations will be executed in the current transaction.
 //
 // Will start a new transaction by default.
 //
-function fetchAddIndexKey_T(
-    remote,
-    table_name,
-    index_name,
-    { in_tx } = { in_tx: false }
-) {
-    const runnable = tx => {
+function fetchAddIndexKey_T(remote, table_name, index_name) {
+    return kv.runT(remote, function(tx) {
         return incrIndexKey(tx, table_name, index_name).then(_ct => {
-            return getIndexKey_T(tx, table_name, index_name, { in_tx: true });
+            return getIndexKey_T(tx, table_name, index_name);
         });
-    };
-
-    if (in_tx) {
-        return runnable(remote);
-    }
-
-    return kv.runT(remote, runnable);
+    });
 }
 
 // Atomically increment the index key counter value.
@@ -112,18 +92,14 @@ function incrIndexKey(remote, table_name, index_name) {
 
 // See getIndexKey_Unsafe for details.
 //
-// This function will start a new transaction by default. However,
-// given that the current antidote API doesn't allow nested transactions, this function
-// must be called with `{in_tx: true}` if used inside another transaction.
+// This function will start a new transaction by default, unless called from inside
+// another transaction (given that the current API doesn't allow nested transaction).
+// In that case, all operations will be executed in the current transaction.
 //
-function getIndexKey_T(remote, table_name, index_name, { in_tx } = { in_tx: false }) {
-    const run = tx => getIndexKey_Unsafe(tx, table_name, index_name);
-
-    if (in_tx) {
-        return run(remote);
-    }
-
-    return kv.runT(remote, run);
+function getIndexKey_T(remote, table_name, index_name) {
+    return kv.runT(remote, function(tx) {
+        return getIndexKey_Unsafe(tx, table_name, index_name);
+    });
 }
 
 // Given an index name, and the table it references, return
@@ -178,23 +154,14 @@ function fieldsOfIndex(remote, table_name, index_name) {
 
 // See correlateIndices_T for details.
 //
-// This function will start a new transaction by default. However,
-// given that the current antidote API doesn't allow nested transactions, this function
-// must be called with `{in_tx: true}` if used inside another transaction.
+// This function will start a new transaction by default, unless called from inside
+// another transaction (given that the current API doesn't allow nested transaction).
+// In that case, all operations will be executed in the current transaction.
 //
-function correlateIndices_T(
-    remote,
-    table_name,
-    field_names,
-    { in_tx } = { in_tx: false }
-) {
-    const run = tx => correlateIndices_Unsafe(tx, table_name, field_names);
-
-    if (in_tx) {
-        return run(remote);
-    }
-
-    return kv.runT(remote, run);
+function correlateIndices_T(remote, table_name, field_names) {
+    return kv.runT(remote, function(tx) {
+        return correlateIndices_Unsafe(tx, table_name, field_names);
+    });
 }
 
 // Given a table name, and a list of field names, return a list of the indices

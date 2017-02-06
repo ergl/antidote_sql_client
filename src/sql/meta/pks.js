@@ -28,22 +28,16 @@ function getPKField(remote, table_name) {
 // Given table name, perform a fetch-and-add on its key counter reference,
 // and return the new value.
 //
-// To perform FAA atomically, this function must start a new transaction. However,
-// given that the current antidote API doesn't allow nested transactions, this function
-// must be called with `{in_tx: true}` if used inside another transaction.
+// To perform FAA atomically, this function will start a new transaction by default,
+// unless called from inside another transaction (given that the current API doesn't
+// allow nested transaction).
 //
-// Will start a new transaction by default.
+// In that case, all operations will be executed in the current transaction.
 //
-function fetchAddPrimaryKey_T(remote, table_name, { in_tx } = { in_tx: false }) {
-    const runnable = tx => {
+function fetchAddPrimaryKey_T(remote, table_name) {
+    return kv.runT(remote, function(tx) {
         return incrKey(tx, table_name).then(_ => getCurrentKey(tx, table_name));
-    };
-
-    if (in_tx) {
-        return runnable(remote);
-    }
-
-    return kv.runT(remote, runnable);
+    });
 }
 
 function getCurrentKey(remote, table_name) {

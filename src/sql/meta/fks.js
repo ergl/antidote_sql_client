@@ -7,18 +7,14 @@ const keyEncoding = require('./../../db/keyEncoding');
 
 // See addFK_Unsafe for details.
 //
-// This function will start a new transaction by default. However,
-// given that the current antidote API doesn't allow nested transactions, this function
-// must be called with `{in_tx: true}` if used inside another transaction.
+// This function will start a new transaction by default, unless called from inside
+// another transaction (given that the current API doesn't allow nested transaction).
+// In that case, all operations will be executed in the current transaction.
 //
-function addFK_T(remote, table_name, mapping, { in_tx } = { in_tx: false }) {
-    const runnable = tx => addFK_Unsafe(tx, table_name, mapping);
-
-    if (in_tx) {
-        return runnable(remote);
-    }
-
-    return kv.runT(remote, runnable);
+function addFK_T(remote, table_name, mapping) {
+    return kv.runT(remote, function(tx) {
+        return addFK_Unsafe(tx, table_name, mapping);
+    });
 }
 
 // Given a table name, and a list of maps `{field_name, reference_table}`,
@@ -108,18 +104,14 @@ function isFK(remote, table_name, field) {
 
 // See correlateIndices_T for details.
 //
-// This function will start a new transaction by default. However,
-// given that the current antidote API doesn't allow nested transactions, this function
-// must be called with `{in_tx: true}` if used inside another transaction.
+// This function will start a new transaction by default, unless called from inside
+// another transaction (given that the current API doesn't allow nested transaction).
+// In that case, all operations will be executed in the current transaction.
 //
-function correlateFKs_T(remote, table_name, field_names, { in_tx } = { in_tx: false }) {
-    const run = tx => correlateFKs_Unsafe(tx, table_name, field_names);
-
-    if (in_tx) {
-        return run(remote);
-    }
-
-    return kv.runT(remote, run);
+function correlateFKs_T(remote, table_name, field_names) {
+    return kv.runT(remote, function(tx) {
+        return correlateFKs_Unsafe(tx, table_name, field_names);
+    });
 }
 
 // Given a table name, and a list of field names, return a list of the foreign key structure

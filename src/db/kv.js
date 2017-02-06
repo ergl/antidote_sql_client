@@ -12,6 +12,12 @@ function closeRemote(remote) {
     remote.close();
 }
 
+// The interface for connections and transaction handles is pretty much
+// identical, but the current API doesn't allow nested transaction.
+function isTxHandle(remote) {
+    return !remote.hasOwnProperty('minSnapshotTime');
+}
+
 function startT(remote) {
     return remote.startTransaction();
 }
@@ -20,19 +26,19 @@ function commitT(remote) {
     return remote.commit();
 }
 
-function runT(remote, fn, { ignore_ct } = { ignore_ct: true }) {
-    const runnable = tx => {
-        return fn(tx).then(v => commitT(tx).then(ct => {
-            if (ignore_ct) {
-                return v;
-            }
+function runT(remote, fn) {
+    // If the given remote is a transaction handle,
+    // execute the function with the current one.
+    if (isTxHandle(remote)) {
+        return fn(remote);
+    }
 
-            return {
-                ct: ct,
-                result: v
-            };
-        }));
+    const runnable = tx => {
+        return fn(tx).then(v => {
+            return commitT(tx).then(ct => ({ ct, result: v }));
+        });
     };
+
     return startT(remote).then(runnable);
 }
 
@@ -65,7 +71,7 @@ function condPut(remote, key, value, expected) {
     };
 
     // Only care about commit time
-    return runT(remote, run, { ignore_ct: false }).then(({ ct }) => ct);
+    return runT(remote, run);
 }
 
 function get(remote, key) {
