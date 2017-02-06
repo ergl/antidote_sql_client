@@ -1,20 +1,20 @@
-const assert = require('assert')
+const assert = require('assert');
 
-const utils = require('../utils')
+const utils = require('../utils');
 
-const kv = require('../db/kv')
-const pks = require('./meta/pks')
-const fks = require('./meta/fks')
-const _schema = require('./meta/schema')
-const indices = require('./meta/indices')
-const keyEncoding = require('../db/keyEncoding')
-const tableMetadata = require('./tableMetadata')
+const kv = require('../db/kv');
+const pks = require('./meta/pks');
+const fks = require('./meta/fks');
+const _schema = require('./meta/schema');
+const indices = require('./meta/indices');
+const keyEncoding = require('../db/keyEncoding');
+const tableMetadata = require('./tableMetadata');
 
 // TODO: Support user-defined primary keys (and non-numeric)
 // TODO: Allow null values into the database by omitting fields
 function create(remote, name, schema) {
     // Pick the head of the schema as an autoincremented primary key
-    return tableMetadata.createMeta(remote, name, schema[0], schema)
+    return tableMetadata.createMeta(remote, name, schema[0], schema);
 }
 
 // See insertInto_Unsafe for details.
@@ -23,14 +23,14 @@ function create(remote, name, schema) {
 // given that the current antidote API doesn't allow nested transactions, this function
 // must be called with `{in_tx: true}` if used inside another transaction.
 //
-function insertInto_T(remote, name, mapping, {in_tx} = {in_tx: false}) {
-    const runnable = tx => insertInto_Unsafe(tx, name, mapping)
+function insertInto_T(remote, name, mapping, { in_tx } = { in_tx: false }) {
+    const runnable = tx => insertInto_Unsafe(tx, name, mapping);
 
     if (in_tx) {
-        return runnable(remote)
+        return runnable(remote);
     }
 
-    return kv.runT(remote, runnable, {ignore_ct: false}).then(({ct}) => ct)
+    return kv.runT(remote, runnable, { ignore_ct: false }).then(({ ct }) => ct);
 }
 
 // Given a table name, and a map of field names to values,
@@ -55,37 +55,43 @@ function insertInto_Unsafe(remote, table, mapping) {
     // Only support autoincrement keys, so calls to insert must not contain
     // the primary key. Hence, we fetch the primary key field name here.
     // TODO: When adding user-defined PKs, change this
-    return pks.getPKField(remote, table).then(pk_field => {
-        const field_names = Object.keys(mapping)
-        return field_names.concat(pk_field)
-    }).then(schema => {
-        // Inserts must specify every field, don't allow nulls by default
-        // Easily solvable by inserting a bottom value.
-        // TODO: Add bottom value for nullable fields
-        return _schema.validateSchema(remote, table, schema).then(r => {
-            if (!r) throw "Invalid schema"
-
-            return swapFKReferences_Unsafe(remote, table, mapping)
+    return pks
+        .getPKField(remote, table)
+        .then(pk_field => {
+            const field_names = Object.keys(mapping);
+            return field_names.concat(pk_field);
         })
-    }).then(({valid, result}) => {
-        if (!valid) throw 'FK constraint failed'
-        // We MUST be inside a transaction, so the call
-        // to `fetchAddPrimaryKey_T` MUST NOT spawn a new transaction.
-        const f_pk_value = pks.fetchAddPrimaryKey_T(remote, table, { in_tx: true })
-        return f_pk_value.then(pk_value => ({ pk_value, result }))
-    }).then(({pk_value, result}) => {
-        const field_names = Object.keys(result)
-        const pk_key = keyEncoding.encodePrimary(table, pk_value)
-        const field_keys = field_names.map(f => keyEncoding.encodeField(table, pk_value, f))
-        const field_values = field_names.map(f => mapping[f])
+        .then(schema => {
+            // Inserts must specify every field, don't allow nulls by default
+            // Easily solvable by inserting a bottom value.
+            // TODO: Add bottom value for nullable fields
+            return _schema.validateSchema(remote, table, schema).then(r => {
+                if (!r) throw 'Invalid schema';
 
-        const keys = field_keys.concat(pk_key)
-        const values = field_values.concat(pk_value)
-
-        return kv.put(remote, keys, values).then(_ => {
-            return updateIndices(remote, table, pk_key, mapping)
+                return swapFKReferences_Unsafe(remote, table, mapping);
+            });
         })
-    })
+        .then(({ valid, result }) => {
+            if (!valid) throw 'FK constraint failed';
+            // We MUST be inside a transaction, so the call
+            // to `fetchAddPrimaryKey_T` MUST NOT spawn a new transaction.
+            const f_pk_value = pks.fetchAddPrimaryKey_T(remote, table, { in_tx: true });
+            return f_pk_value.then(pk_value => ({ pk_value, result }));
+        })
+        .then(({ pk_value, result }) => {
+            const field_names = Object.keys(result);
+            const pk_key = keyEncoding.encodePrimary(table, pk_value);
+            const field_keys = field_names.map(f =>
+                keyEncoding.encodeField(table, pk_value, f));
+            const field_values = field_names.map(f => mapping[f]);
+
+            const keys = field_keys.concat(pk_key);
+            const values = field_values.concat(pk_value);
+
+            return kv.put(remote, keys, values).then(_ => {
+                return updateIndices(remote, table, pk_key, mapping);
+            });
+        });
 }
 
 // Given a table, and a map of updated field names to their values,
@@ -102,8 +108,8 @@ function insertInto_Unsafe(remote, table, mapping) {
 // This function is unsafe. It MUST be ran inside a transaction.
 //
 function swapFKReferences_Unsafe(remote, table, mapping) {
-    const field_names = Object.keys(mapping)
-    const correlated = fks.correlateFKs_T(remote, table, field_names, {in_tx: true})
+    const field_names = Object.keys(mapping);
+    const correlated = fks.correlateFKs_T(remote, table, field_names, { in_tx: true });
 
     // TODO: Valid for now, change if primary keys are user defined, and / or when fks
     // may point to arbitrary fields
@@ -113,80 +119,104 @@ function swapFKReferences_Unsafe(remote, table, mapping) {
     // We can check if a specific row exists by checking it its less or equal to the keyrange
     // The actual logic for the cutoff is implemented inside select_T
     return correlated.then(relation => {
-        const valid_checks = relation.map(({reference_table, field_name}) => {
-            const range = mapping[field_name]
-            const f_select = select_T(remote, reference_table, field_name, range, {in_tx: true})
-            const valid = f_select.then(row => {
-                assert(row.length === 1)
-                const value = row[0][field_name]
-                return value === mapping[field_name]
-            }).catch(cutoff_error => {
-                console.log(cutoff_error)
-                return false
-            })
+        const valid_checks = relation.map(({ reference_table, field_name }) => {
+            const range = mapping[field_name];
+            const f_select = select_T(remote, reference_table, field_name, range, {
+                in_tx: true
+            });
+            const valid = f_select
+                .then(row => {
+                    assert(row.length === 1);
+                    const value = row[0][field_name];
+                    return value === mapping[field_name];
+                })
+                .catch(cutoff_error => {
+                    console.log(cutoff_error);
+                    return false;
+                });
 
             return valid.then(v => {
-                if (!v) throw 'FK constraint failed'
+                if (!v) throw 'FK constraint failed';
                 return {
                     k: field_name,
                     v: keyEncoding.encodePrimary(table, mapping[field_name])
-                }
+                };
+            });
+        });
+
+        return Promise.all(valid_checks)
+            .then(to_swap => {
+                const swapped = to_swap.reduce(
+                    (acc, { k, v }) => {
+                        return Object.assign(acc, { [k]: v });
+                    },
+                    mapping
+                );
+
+                return {
+                    valid: true,
+                    result: swapped
+                };
             })
-        })
-
-        return Promise.all(valid_checks).then(to_swap => {
-            const swapped = to_swap.reduce((acc, {k, v}) => {
-                return Object.assign(acc, {[k]: v})
-            }, mapping)
-
-            return {
-                valid: true,
-                result: swapped
-            }
-        }).catch(_ => {
-            return {
-                valid: false,
-                result: undefined
-            }
-        })
-    })
+            .catch(_ => {
+                return {
+                    valid: false,
+                    result: undefined
+                };
+            });
+    });
 }
 
 function updateIndices(remote, table, fk, mapping) {
-    const field_names = Object.keys(mapping)
-    const correlated = indices.correlateIndices_T(remote, table, field_names, {in_tx: true})
+    const field_names = Object.keys(mapping);
+    const correlated = indices.correlateIndices_T(remote, table, field_names, {
+        in_tx: true
+    });
 
     return correlated.then(relation => {
-        const ops = relation.reduce((acc, {index_name, field_names}) => {
-            // FIXME: field f might not be in the mapping
-            const field_values = field_names.map(f => mapping[f])
-            const pr = updateSingleIndex_Unsafe(remote, table, index_name, fk, field_names, field_values)
-            return Promise.all([acc, pr]).then(res => {
-                const [acc, {keys, values}] = res
-                return {
-                    keys: acc.keys.concat(keys),
-                    values: acc.values.concat(values)
-                }
-            })
-        }, Promise.resolve(({keys: [], values: []})))
+        const ops = relation.reduce(
+            (acc, { index_name, field_names }) => {
+                // FIXME: field f might not be in the mapping
+                const field_values = field_names.map(f => mapping[f]);
+                const pr = updateSingleIndex_Unsafe(
+                    remote,
+                    table,
+                    index_name,
+                    fk,
+                    field_names,
+                    field_values
+                );
+                return Promise.all([acc, pr]).then(res => {
+                    const [acc, { keys, values }] = res;
+                    return {
+                        keys: acc.keys.concat(keys),
+                        values: acc.values.concat(values)
+                    };
+                });
+            },
+            Promise.resolve({ keys: [], values: [] })
+        );
 
-        return ops.then(({keys, values}) => {
-            return kv.put(remote, keys, values)
-        })
-    })
+        return ops.then(({ keys, values }) => {
+            return kv.put(remote, keys, values);
+        });
+    });
 }
 
 function updateSingleIndex_Unsafe(remote, table, index, fk, field_names, field_values) {
-    return indices.fetchAddIndexKey_T(remote, table, index, {in_tx: true}).then(fresh_key => {
-        const pk = keyEncoding.encodeIndexPrimary(table, index, fresh_key)
-        const field_keys = field_names.map(f => keyEncoding.encodeIndexField(table, index, fresh_key, f))
+    return indices
+        .fetchAddIndexKey_T(remote, table, index, { in_tx: true })
+        .then(fresh_key => {
+            const pk = keyEncoding.encodeIndexPrimary(table, index, fresh_key);
+            const field_keys = field_names.map(f =>
+                keyEncoding.encodeIndexField(table, index, fresh_key, f));
 
-        // Make the index pk key point to the pk of the indexed table
-        const keys = field_keys.concat(pk)
-        const values = field_values.concat(fk)
+            // Make the index pk key point to the pk of the indexed table
+            const keys = field_keys.concat(pk);
+            const values = field_values.concat(fk);
 
-        return {keys, values}
-    })
+            return { keys, values };
+        });
 }
 
 // See select_Unsafe for details.
@@ -195,14 +225,14 @@ function updateSingleIndex_Unsafe(remote, table, index, fk, field_names, field_v
 // given that the current antidote API doesn't allow nested transactions, this function
 // must be called with `{in_tx: true}` if used inside another transaction.
 //
-function select_T(remote, table, fields, pk_value, {in_tx} = {in_tx: false}) {
-    const run = tx => select_Unsafe(tx, table, fields, pk_value)
+function select_T(remote, table, fields, pk_value, { in_tx } = { in_tx: false }) {
+    const run = tx => select_Unsafe(tx, table, fields, pk_value);
 
     if (in_tx) {
-        return run(remote)
+        return run(remote);
     }
 
-    return kv.runT(remote, run)
+    return kv.runT(remote, run);
 }
 
 // select_Unsafe(_, t, [f1, f2, ..., fn], pk) will perform
@@ -221,28 +251,29 @@ function select_T(remote, table, fields, pk_value, {in_tx} = {in_tx: false}) {
 //
 // TODO: Support complex predicates
 function select_Unsafe(remote, table, field, pk_value) {
-    const pk_values = utils.arreturn(pk_value)
-    const fields = utils.arreturn(field)
+    const pk_values = utils.arreturn(pk_value);
+    const fields = utils.arreturn(field);
 
     const perform_scan = lookup_fields => {
         // We MUST be inside a transaction, so the call to `scan_T` MUST NOT spawn a new transaction.
-        return scan_T(remote, table, pk_values, {in_tx: true}).then(res => res.map(row => {
+        return scan_T(remote, table, pk_values, {
+            in_tx: true
+        }).then(res => res.map(row => {
             return Object.keys(row)
                 .filter(k => lookup_fields.includes(k))
-                .reduce((acc, k) => Object.assign(acc, {[k]: row[k]}), {})
-        }))
-    }
+                .reduce((acc, k) => Object.assign(acc, { [k]: row[k] }), {});
+        }));
+    };
 
     // If we query '*', get the entire schema
     if (fields.length === 1 && fields[0] === '*') {
-        return _schema.getSchema(remote, table).then(schema => perform_scan(schema))
+        return _schema.getSchema(remote, table).then(schema => perform_scan(schema));
     }
 
     return _schema.validateSchemaSubset(remote, table, fields).then(r => {
-        if (!r) throw "Invalid schema"
-        return perform_scan(fields)
-    })
-
+        if (!r) throw 'Invalid schema';
+        return perform_scan(fields);
+    });
 }
 
 // See scan_Unsafe for details.
@@ -251,48 +282,55 @@ function select_Unsafe(remote, table, field, pk_value) {
 // given that the current antidote API doesn't allow nested transactions, this function
 // must be called with `{in_tx: true}` if used inside another transaction.
 //
-function scan_T(remote, table, range, {in_tx} = {in_tx: false}) {
-    const runnable = tx => scan_Unsafe(tx, table, range)
+function scan_T(remote, table, range, { in_tx } = { in_tx: false }) {
+    const runnable = tx => scan_Unsafe(tx, table, range);
 
     if (in_tx) {
-        return runnable(remote)
+        return runnable(remote);
     }
 
-    return kv.runT(remote, runnable)
+    return kv.runT(remote, runnable);
 }
 
-function scanIndex_T(remote, table, index_name, range, {in_tx} = {in_tx: false}) {
-    const runnable = tx => scanIndex_Unsafe(tx, table, index_name, range)
+function scanIndex_T(remote, table, index_name, range, { in_tx } = { in_tx: false }) {
+    const runnable = tx => scanIndex_Unsafe(tx, table, index_name, range);
 
     if (in_tx) {
-        return runnable(remote)
+        return runnable(remote);
     }
 
-    return kv.runT(remote, runnable)
+    return kv.runT(remote, runnable);
 }
 
 function scanIndex_Unsafe(remote, table, index_name, range) {
     // Assumes keys are numeric
-    const f_cutoff = indices.getIndexKey_T(remote, table, index_name, {in_tx: true}).then(m => {
-        return range.find(e => e > m)
-    })
+    const f_cutoff = indices
+        .getIndexKey_T(remote, table, index_name, { in_tx: true })
+        .then(m => {
+            return range.find(e => e > m);
+        });
 
-    return f_cutoff.then(cutoff => {
-        if (cutoff !== undefined) throw `Error: scan key ${cutoff} out of valid range`
-        return indices.fieldsOfIndex(remote, table, index_name)
-    }).then(indexed_fields_names => {
-        // For every k in key range, encode k
-        const keys = utils.flatten(range.map(k => {
-            return indexed_fields_names.map(f => {
-                // FIXME: Right now we're getting only the value, at this key
-                // The key encodeIndexPrimary(table, index_name, k) points to the
-                // pk key of those fields. Follow that if we need a join
-                return keyEncoding.encodeIndexField(table, index_name, k, f)
-            })
-        }))
+    return f_cutoff
+        .then(cutoff => {
+            if (cutoff !== undefined)
+                throw `Error: scan key ${cutoff} out of valid range`;
+            return indices.fieldsOfIndex(remote, table, index_name);
+        })
+        .then(indexed_fields_names => {
+            // For every k in key range, encode k
+            const keys = utils.flatten(
+                range.map(k => {
+                    return indexed_fields_names.map(f => {
+                        // FIXME: Right now we're getting only the value, at this key
+                        // The key encodeIndexPrimary(table, index_name, k) points to the
+                        // pk key of those fields. Follow that if we need a join
+                        return keyEncoding.encodeIndexField(table, index_name, k, f);
+                    });
+                })
+            );
 
-        return kv.get(remote, keys)
-    })
+            return kv.get(remote, keys);
+        });
 }
 
 // Given a table name, and a list of primary keys, will recursively
@@ -307,46 +345,60 @@ function scanIndex_Unsafe(remote, table, index_name, range) {
 function scan_Unsafe(remote, table, range) {
     // Assumes keys are numeric
     const f_cutoff = pks.getCurrentKey(remote, table).then(m => {
-        return range.find(e => e > m)
-    })
+        return range.find(e => e > m);
+    });
 
-    return f_cutoff.then(cutoff => {
-        if (cutoff !== undefined) throw `Error: scan key ${cutoff} out of valid range`
-        return _schema.getSchema(remote, table)
-    }).then(schema => {
-        // For every k in key range, encode k
-        const keys = range.map(k => keyEncoding.encodePrimary(table, k))
-
-        // Get the primary key field.
-        const f_pk_field = pks.getPKField(remote, table)
-
-        // And remove if from the schema, as the pk field is encoded differently.
-        const f_non_pk_fields = f_pk_field.then(pk_field => schema.filter(f => f !== pk_field))
-
-        // For every key, fetch and read the field subkeys
-        const f_results = keys.map((key, idx) => {
-            // `Promise.all` guarantees the same order in promises and results
-            return Promise.all([f_pk_field, f_non_pk_fields]).then(([pk_field, fields]) => {
-                const field_keys = fields.map(f => keyEncoding.encodeField(table, range[idx], f))
-                // After encoding all fields, we append the pk key/field to the range we want to scan
-                return scanRow(remote, field_keys.concat(key), fields.concat(pk_field))
-            })
+    return f_cutoff
+        .then(cutoff => {
+            if (cutoff !== undefined)
+                throw `Error: scan key ${cutoff} out of valid range`;
+            return _schema.getSchema(remote, table);
         })
+        .then(schema => {
+            // For every k in key range, encode k
+            const keys = range.map(k => keyEncoding.encodePrimary(table, k));
 
-        // Execute all scanRow calls in parallel
-        return Promise.all(f_results)
-    })
+            // Get the primary key field.
+            const f_pk_field = pks.getPKField(remote, table);
+
+            // And remove if from the schema, as the pk field is encoded differently.
+            const f_non_pk_fields = f_pk_field.then(pk_field =>
+                schema.filter(f => f !== pk_field));
+
+            // For every key, fetch and read the field subkeys
+            const f_results = keys.map((key, idx) => {
+                // `Promise.all` guarantees the same order in promises and results
+                return Promise.all([f_pk_field, f_non_pk_fields]).then((
+                    [pk_field, fields]
+                ) => {
+                    const field_keys = fields.map(f =>
+                        keyEncoding.encodeField(table, range[idx], f));
+                    // After encoding all fields, we append the pk key/field to the range we want to scan
+                    return scanRow(
+                        remote,
+                        field_keys.concat(key),
+                        fields.concat(pk_field)
+                    );
+                });
+            });
+
+            // Execute all scanRow calls in parallel
+            return Promise.all(f_results);
+        });
 }
 
 // Given a list of encoded keys, and a matching list of field names,
 // build an object s.t. `{f: get(k)}` for every k in field_keys, f in fields
 function scanRow(remote, field_keys, fields) {
     return kv.get(remote, field_keys).then(values => {
-        return values.reduce((acc, val, idx) => {
-            const field_name = fields[idx]
-            return Object.assign(acc, {[field_name]: val})
-        }, {})
-    })
+        return values.reduce(
+            (acc, val, idx) => {
+                const field_name = fields[idx];
+                return Object.assign(acc, { [field_name]: val });
+            },
+            {}
+        );
+    });
 }
 
 module.exports = {
@@ -355,4 +407,4 @@ module.exports = {
     select_T,
     insertInto_T,
     scanIndex_T
-}
+};
