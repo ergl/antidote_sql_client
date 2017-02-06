@@ -1,19 +1,19 @@
-const utils = require('./../utils')
+const utils = require('./../utils');
 
-const metaCont = require('./meta/metaCont')
+const metaCont = require('./meta/metaCont');
 
-const pks = require('./meta/pks')
-const fks = require('./meta/fks')
-const schema = require('./meta/schema')
-const indices = require('./meta/indices')
+const pks = require('./meta/pks');
+const fks = require('./meta/fks');
+const schema = require('./meta/schema');
+const indices = require('./meta/indices');
 
 function createMeta(remote, table_name, pk_field, schema) {
-    const ops = aggregateOps(remote, table_name, pk_field, schema)
-    return remote.update(ops)
+    const ops = aggregateOps(remote, table_name, pk_field, schema);
+    return remote.update(ops);
 }
 
 function aggregateOps(remote, table_name, pk_field, schema_map) {
-    const meta_ref = metaCont.metaRef(remote, table_name)
+    const meta_ref = metaCont.metaRef(remote, table_name);
 
     // This feels so bad, but so good at the same time
     const nested_ops = [pks, fks, schema, indices].map(module => {
@@ -21,15 +21,14 @@ function aggregateOps(remote, table_name, pk_field, schema_map) {
             increment_pk: 0,
             pk_field: pk_field,
             schema: schema_map,
-
             fks: [],
             indices: []
-        })
-    })
+        });
+    });
 
-    return utils.flatten(nested_ops)
+    return utils.flatten(nested_ops);
 }
 
 module.exports = {
     createMeta
-}
+};
