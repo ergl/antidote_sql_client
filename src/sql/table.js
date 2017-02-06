@@ -19,18 +19,14 @@ function create(remote, name, schema) {
 
 // See insertInto_Unsafe for details.
 //
-// This function will start a new transaction by default. However,
-// given that the current antidote API doesn't allow nested transactions, this function
-// must be called with `{in_tx: true}` if used inside another transaction.
+// This function will start a new transaction by default, unless called from inside
+// another transaction (given that the current API doesn't allow nested transaction).
+// In that case, all operations will be executed in the current transaction.
 //
-function insertInto_T(remote, name, mapping, { in_tx } = { in_tx: false }) {
-    const runnable = tx => insertInto_Unsafe(tx, name, mapping);
-
-    if (in_tx) {
-        return runnable(remote);
-    }
-
-    return kv.runT(remote, runnable, { ignore_ct: false }).then(({ ct }) => ct);
+function insertInto_T(remote, name, mapping) {
+    return kv.runT(remote, function(tx) {
+        return insertInto_Unsafe(tx, name, mapping);
+    });
 }
 
 // Given a table name, and a map of field names to values,
@@ -73,9 +69,7 @@ function insertInto_Unsafe(remote, table, mapping) {
         })
         .then(({ valid, result }) => {
             if (!valid) throw 'FK constraint failed';
-            // We MUST be inside a transaction, so the call
-            // to `fetchAddPrimaryKey_T` MUST NOT spawn a new transaction.
-            const f_pk_value = pks.fetchAddPrimaryKey_T(remote, table, { in_tx: true });
+            const f_pk_value = pks.fetchAddPrimaryKey_T(remote, table);
             return f_pk_value.then(pk_value => ({ pk_value, result }));
         })
         .then(({ pk_value, result }) => {
@@ -109,7 +103,7 @@ function insertInto_Unsafe(remote, table, mapping) {
 //
 function swapFKReferences_Unsafe(remote, table, mapping) {
     const field_names = Object.keys(mapping);
-    const correlated = fks.correlateFKs_T(remote, table, field_names, { in_tx: true });
+    const correlated = fks.correlateFKs_T(remote, table, field_names);
 
     // TODO: Valid for now, change if primary keys are user defined, and / or when fks
     // may point to arbitrary fields
@@ -121,9 +115,7 @@ function swapFKReferences_Unsafe(remote, table, mapping) {
     return correlated.then(relation => {
         const valid_checks = relation.map(({ reference_table, field_name }) => {
             const range = mapping[field_name];
-            const f_select = select_T(remote, reference_table, field_name, range, {
-                in_tx: true
-            });
+            const f_select = select_T(remote, reference_table, field_name, range);
             const valid = f_select
                 .then(row => {
                     assert(row.length === 1);
@@ -169,9 +161,7 @@ function swapFKReferences_Unsafe(remote, table, mapping) {
 
 function updateIndices(remote, table, fk, mapping) {
     const field_names = Object.keys(mapping);
-    const correlated = indices.correlateIndices_T(remote, table, field_names, {
-        in_tx: true
-    });
+    const correlated = indices.correlateIndices_T(remote, table, field_names);
 
     return correlated.then(relation => {
         const ops = relation.reduce(
@@ -204,35 +194,29 @@ function updateIndices(remote, table, fk, mapping) {
 }
 
 function updateSingleIndex_Unsafe(remote, table, index, fk, field_names, field_values) {
-    return indices
-        .fetchAddIndexKey_T(remote, table, index, { in_tx: true })
-        .then(fresh_key => {
-            const pk = keyEncoding.encodeIndexPrimary(table, index, fresh_key);
-            const field_keys = field_names.map(f =>
-                keyEncoding.encodeIndexField(table, index, fresh_key, f));
+    return indices.fetchAddIndexKey_T(remote, table, index).then(fresh_key => {
+        const pk = keyEncoding.encodeIndexPrimary(table, index, fresh_key);
+        const field_keys = field_names.map(f =>
+            keyEncoding.encodeIndexField(table, index, fresh_key, f));
 
-            // Make the index pk key point to the pk of the indexed table
-            const keys = field_keys.concat(pk);
-            const values = field_values.concat(fk);
+        // Make the index pk key point to the pk of the indexed table
+        const keys = field_keys.concat(pk);
+        const values = field_values.concat(fk);
 
-            return { keys, values };
-        });
+        return { keys, values };
+    });
 }
 
 // See select_Unsafe for details.
 //
-// This function will start a new transaction by default. However,
-// given that the current antidote API doesn't allow nested transactions, this function
-// must be called with `{in_tx: true}` if used inside another transaction.
+// This function will start a new transaction by default, unless called from inside
+// another transaction (given that the current API doesn't allow nested transaction).
+// In that case, all operations will be executed in the current transaction.
 //
-function select_T(remote, table, fields, pk_value, { in_tx } = { in_tx: false }) {
-    const run = tx => select_Unsafe(tx, table, fields, pk_value);
-
-    if (in_tx) {
-        return run(remote);
-    }
-
-    return kv.runT(remote, run);
+function select_T(remote, table, fields, pk_value) {
+    return kv.runT(remote, function(tx) {
+        return select_Unsafe(tx, table, fields, pk_value);
+    });
 }
 
 // select_Unsafe(_, t, [f1, f2, ..., fn], pk) will perform
@@ -256,9 +240,7 @@ function select_Unsafe(remote, table, field, pk_value) {
 
     const perform_scan = lookup_fields => {
         // We MUST be inside a transaction, so the call to `scan_T` MUST NOT spawn a new transaction.
-        return scan_T(remote, table, pk_values, {
-            in_tx: true
-        }).then(res => res.map(row => {
+        return scan_T(remote, table, pk_values).then(res => res.map(row => {
             return Object.keys(row)
                 .filter(k => lookup_fields.includes(k))
                 .reduce((acc, k) => Object.assign(acc, { [k]: row[k] }), {});
@@ -278,37 +260,27 @@ function select_Unsafe(remote, table, field, pk_value) {
 
 // See scan_Unsafe for details.
 //
-// This function will start a new transaction by default. However,
-// given that the current antidote API doesn't allow nested transactions, this function
-// must be called with `{in_tx: true}` if used inside another transaction.
+// This function will start a new transaction by default, unless called from inside
+// another transaction (given that the current API doesn't allow nested transaction).
+// In that case, all operations will be executed in the current transaction.
 //
-function scan_T(remote, table, range, { in_tx } = { in_tx: false }) {
-    const runnable = tx => scan_Unsafe(tx, table, range);
-
-    if (in_tx) {
-        return runnable(remote);
-    }
-
-    return kv.runT(remote, runnable);
+function scan_T(remote, table, range) {
+    return kv.runT(remote, function(tx) {
+        return scan_Unsafe(tx, table, range);
+    });
 }
 
-function scanIndex_T(remote, table, index_name, range, { in_tx } = { in_tx: false }) {
-    const runnable = tx => scanIndex_Unsafe(tx, table, index_name, range);
-
-    if (in_tx) {
-        return runnable(remote);
-    }
-
-    return kv.runT(remote, runnable);
+function scanIndex_T(remote, table, index_name, range) {
+    return kv.runT(remote, function(tx) {
+        return scanIndex_Unsafe(tx, table, index_name, range);
+    });
 }
 
 function scanIndex_Unsafe(remote, table, index_name, range) {
     // Assumes keys are numeric
-    const f_cutoff = indices
-        .getIndexKey_T(remote, table, index_name, { in_tx: true })
-        .then(m => {
-            return range.find(e => e > m);
-        });
+    const f_cutoff = indices.getIndexKey_T(remote, table, index_name).then(m => {
+        return range.find(e => e > m);
+    });
 
     return f_cutoff
         .then(cutoff => {
