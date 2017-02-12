@@ -2,7 +2,6 @@ const utils = require('./../../utils');
 
 const kv = require('./../../db/kv');
 const schema = require('./schema');
-const metaCont = require('./metaCont');
 const keyEncoding = require('./../../db/keyEncoding');
 
 // Given a table name, and a map `{index_name, field_names}`,
@@ -45,26 +44,22 @@ function addIndex_T(remote, table_name, { index_name, field_names: field_name })
 // Will return the empty list if there are no indices.
 //
 function getIndices(remote, table_name) {
-    const meta_ref = metaCont.metaRef(remote, table_name);
-    const index_key = keyEncoding.encodeMetaIndex(table_name);
-    return meta_ref
-        .read()
-        .then(meta_values => {
-            return meta_values.registerValue(index_key);
-        })
-        .then(idx => idx === undefined ? [] : idx);
+    const meta_key = keyEncoding.encodeTableName(table_name);
+    return kv.get(remote, meta_key).then(values => {
+        const indices = values[0].indices;
+        return indices === undefined ? [] : indices;
+    });
 }
 
 // setIndex(r, t, idxs) will set the index map list of the table `t` to `idxs`
 function setIndex(remote, table_name, indices) {
-    const meta_ref = metaCont.metaRef(remote, table_name);
-    return remote.update(updateOps(meta_ref, table_name, { indices: indices }));
-}
-
-// Generate the appropiate update operations to set the indices in the meta table
-function updateOps(meta_ref, table_name, { indices }) {
-    const meta_index_ref = meta_ref.register(keyEncoding.encodeMetaIndex(table_name));
-    return meta_index_ref.set(indices);
+    const meta_key = keyEncoding.encodeTableName(table_name);
+    return kv.runT(remote, function(tx) {
+        return kv.get(tx, meta_key).then(values => {
+            const meta = values[0];
+            return kv.put(tx, meta_key, Object.assign(meta, { indices }));
+        });
+    });
 }
 
 // Given an index name, and the table it references, perform
@@ -184,8 +179,9 @@ function correlateIndices_Unsafe(remote, table_name, field_name) {
         };
 
         const promises = indices.map(index => {
-            return fieldsOfIndex(remote, table_name, index).then(fields =>
-                correlate(index, fields));
+            return fieldsOfIndex(remote, table_name, index).then(fields => {
+                return correlate(index, fields);
+            });
         });
 
         return Promise.all(promises);
@@ -207,6 +203,5 @@ module.exports = {
     addIndex_T,
     getIndexKey_T,
     fetchAddIndexKey_T,
-    correlateIndices_T,
-    updateOps
+    correlateIndices_T
 };

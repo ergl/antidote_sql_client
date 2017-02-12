@@ -1,8 +1,7 @@
 const utils = require('../../utils/index');
 
-const kv = require('./../../db/kv');
 const schema = require('./schema');
-const metaCont = require('./metaCont');
+const kv = require('./../../db/kv');
 const keyEncoding = require('./../../db/keyEncoding');
 
 // See addFK_Unsafe for details.
@@ -44,8 +43,9 @@ function addFK_Unsafe(remote, table_name, mapping) {
     constraints.push(schema.validateSchemaSubset(remote, table_name, reference_fields));
 
     // Check if all the constraints are satisfied
-    const check = Promise.all(constraints).then(r =>
-        r.reduce((prev, curr) => prev && curr));
+    const check = Promise.all(constraints).then(r => {
+        return r.reduce((prev, curr) => prev && curr);
+    });
 
     return check.then(r => {
         if (!r) throw "Can't add fk on non-existent field";
@@ -62,26 +62,22 @@ function addFK_Unsafe(remote, table_name, mapping) {
 // Will return the empty list if there are no foreign keys.
 //
 function getFKs(remote, table_name) {
-    const meta_ref = metaCont.metaRef(remote, table_name);
-    const fk_tuples_key = keyEncoding.encodeMetaFK(table_name);
-    return meta_ref
-        .read()
-        .then(meta_values => {
-            return meta_values.registerValue(fk_tuples_key);
-        })
-        .then(fks => fks === undefined ? [] : fks);
+    const meta_key = keyEncoding.encodeTableName(table_name);
+    return kv.get(remote, meta_key).then(values => {
+        const fks = values[0].fks;
+        return fks === undefined ? [] : fks;
+    });
 }
 
 // setFK(r, t, fk) will set the fks map list of the table `t` to `fk`
 function setFK(remote, table_name, fks) {
-    const meta_ref = metaCont.metaRef(remote, table_name);
-    return remote.update(updateOps(meta_ref, table_name, { fks: fks }));
-}
-
-// Generate the appropiate update operations to set the fks in the meta table
-function updateOps(meta_ref, table_name, { fks }) {
-    const meta_fk_ref = meta_ref.register(keyEncoding.encodeMetaFK(table_name));
-    return meta_fk_ref.set(fks);
+    const meta_key = keyEncoding.encodeTableName(table_name);
+    return kv.runT(remote, function(tx) {
+        return kv.get(tx, meta_key).then(values => {
+            const meta = values[0];
+            return kv.put(tx, meta_key, Object.assign(meta, { fks }));
+        });
+    });
 }
 
 // Given a table name and one of its field, return a list of reference tables
@@ -133,8 +129,7 @@ function correlateFKs_Unsafe(remote, table_name, field_name) {
 
 module.exports = {
     isFK,
-    getForeignTable,
     addFK_T,
-    correlateFKs_T,
-    updateOps
+    getForeignTable,
+    correlateFKs_T
 };
