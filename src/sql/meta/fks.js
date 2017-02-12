@@ -43,8 +43,9 @@ function addFK_Unsafe(remote, table_name, mapping) {
     constraints.push(schema.validateSchemaSubset(remote, table_name, reference_fields));
 
     // Check if all the constraints are satisfied
-    const check = Promise.all(constraints).then(r =>
-        r.reduce((prev, curr) => prev && curr));
+    const check = Promise.all(constraints).then(r => {
+        return r.reduce((prev, curr) => prev && curr);
+    });
 
     return check.then(r => {
         if (!r) throw "Can't add fk on non-existent field";

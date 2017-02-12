@@ -179,8 +179,9 @@ function correlateIndices_Unsafe(remote, table_name, field_name) {
         };
 
         const promises = indices.map(index => {
-            return fieldsOfIndex(remote, table_name, index).then(fields =>
-                correlate(index, fields));
+            return fieldsOfIndex(remote, table_name, index).then(fields => {
+                return correlate(index, fields);
+            });
         });
 
         return Promise.all(promises);
