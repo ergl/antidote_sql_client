@@ -1,5 +1,5 @@
 const kv = require('./../../db/kv');
-const keyEncoding = require('./../../db/keyEncoding');
+const keyEncoding = require('./../../kset/keyEncoding');
 
 // Given a table name, return the name of the field
 // that acts as primary key for the table.
@@ -8,7 +8,7 @@ const keyEncoding = require('./../../db/keyEncoding');
 // a primary key set).
 //
 function getPKField(remote, table_name) {
-    const meta_key = keyEncoding.encodeTableName(table_name);
+    const meta_key = keyEncoding.table(table_name);
     return kv.get(remote, meta_key).then(values => {
         const meta = values[0];
         const pk_field = meta.primary_key_field;
@@ -36,13 +36,13 @@ function fetchAddPrimaryKey_T(remote, table_name) {
 }
 
 function getCurrentKey(remote, table_name) {
-    const meta_key = keyEncoding.encodeTableName(table_name);
+    const meta_key = keyEncoding.table(table_name);
     return kv.get(remote, meta_key).then(values => values[0].current_pk_value);
 }
 
 // Atomically increment the primary key counter value.
 function incrKey(remote, table_name) {
-    const meta_key = keyEncoding.encodeTableName(table_name);
+    const meta_key = keyEncoding.table(table_name);
     return kv.runT(remote, function(tx) {
         return kv.get(tx, meta_key).then(values => {
             const meta = values[0];

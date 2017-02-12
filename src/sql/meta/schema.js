@@ -1,12 +1,12 @@
 const utils = require('../../utils');
 
 const kv = require('./../../db/kv');
-const keyEncoding = require('./../../db/keyEncoding');
+const keyEncoding = require('./../../kset/keyEncoding');
 
 // Get the field list of the given table
 // If the table doesn't exist, return the empty list
 function getSchema(remote, table_name) {
-    const meta_key = keyEncoding.encodeTableName(table_name);
+    const meta_key = keyEncoding.table(table_name);
     return kv.get(remote, meta_key).then(values => {
         const schema = values[0].schema;
         return schema === undefined ? [] : schema;

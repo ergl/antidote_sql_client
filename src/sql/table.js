@@ -7,7 +7,8 @@ const pks = require('./meta/pks');
 const fks = require('./meta/fks');
 const _schema = require('./meta/schema');
 const indices = require('./meta/indices');
-const keyEncoding = require('../db/keyEncoding');
+const legacyEncoding = require('../db/keyEncoding');
+const keyEncoding = require('../kset/keyEncoding');
 const tableMetadata = require('./tableMetadata');
 
 // TODO: Support user-defined primary keys (and non-numeric)
@@ -74,9 +75,10 @@ function insertInto_Unsafe(remote, table, mapping) {
         })
         .then(({ pk_value, result }) => {
             const field_names = Object.keys(result);
-            const pk_key = keyEncoding.encodePrimary(table, pk_value);
-            const field_keys = field_names.map(f =>
-                keyEncoding.encodeField(table, pk_value, f));
+            const pk_key = keyEncoding.spk(table, keyEncoding.d_int(pk_value));
+            const field_keys = field_names.map(f => {
+                return keyEncoding.field(table, keyEncoding.d_int(pk_value), f);
+            });
             const field_values = field_names.map(f => mapping[f]);
 
             const keys = field_keys.concat(pk_key);
@@ -131,7 +133,7 @@ function swapFKReferences_Unsafe(remote, table, mapping) {
                 if (!v) throw 'FK constraint failed';
                 return {
                     k: field_name,
-                    v: keyEncoding.encodePrimary(table, mapping[field_name])
+                    v: keyEncoding.spk(table, keyEncoding.d_int(mapping[field_name]))
                 };
             });
         });
@@ -195,9 +197,12 @@ function updateIndices(remote, table, fk, mapping) {
 
 function updateSingleIndex_Unsafe(remote, table, index, fk, field_names, field_values) {
     return indices.fetchAddIndexKey_T(remote, table, index).then(fresh_key => {
-        const pk = keyEncoding.encodeIndexPrimary(table, index, fresh_key);
-        const field_keys = field_names.map(f =>
-            keyEncoding.encodeIndexField(table, index, fresh_key, f));
+        // FIXME: Change to new encoding
+        const pk = legacyEncoding.encodeIndexPrimary(table, index, fresh_key);
+        const field_keys = field_names.map(f => {
+            // FIXME: Change to new encoding
+            return legacyEncoding.encodeIndexField(table, index, fresh_key, f);
+        });
 
         // Make the index pk key point to the pk of the indexed table
         const keys = field_keys.concat(pk);
@@ -296,7 +301,8 @@ function scanIndex_Unsafe(remote, table, index_name, range) {
                         // FIXME: Right now we're getting only the value, at this key
                         // The key encodeIndexPrimary(table, index_name, k) points to the
                         // pk key of those fields. Follow that if we need a join
-                        return keyEncoding.encodeIndexField(table, index_name, k, f);
+                        // FIXME: Change to new encoding
+                        return legacyEncoding.encodeIndexField(table, index_name, k, f);
                     });
                 })
             );
@@ -328,7 +334,7 @@ function scan_Unsafe(remote, table, range) {
         })
         .then(schema => {
             // For every k in key range, encode k
-            const keys = range.map(k => keyEncoding.encodePrimary(table, k));
+            const keys = range.map(k => keyEncoding.spk(table, keyEncoding.d_int(k)));
 
             // Get the primary key field.
             const f_pk_field = pks.getPKField(remote, table);
@@ -343,8 +349,9 @@ function scan_Unsafe(remote, table, range) {
                 return Promise.all([f_pk_field, f_non_pk_fields]).then((
                     [pk_field, fields]
                 ) => {
-                    const field_keys = fields.map(f =>
-                        keyEncoding.encodeField(table, range[idx], f));
+                    const field_keys = fields.map(f => {
+                        return keyEncoding.field(table, keyEncoding.d_int(range[idx]), f);
+                    });
                     // After encoding all fields, we append the pk key/field to the range we want to scan
                     return scanRow(
                         remote,
