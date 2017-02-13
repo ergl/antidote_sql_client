@@ -98,7 +98,7 @@ function isFK(remote, table_name, field) {
     return getFKs(remote, table_name, field).then(r => r.length !== 0);
 }
 
-// See correlateIndices_T for details.
+// See correlateFKs_Unsafe for details.
 //
 // This function will start a new transaction by default, unless called from inside
 // another transaction (given that the current API doesn't allow nested transaction).

@@ -163,7 +163,7 @@ function swapFKReferences_Unsafe(remote, table, mapping) {
 
 function updateIndices(remote, table, fk, mapping) {
     const field_names = Object.keys(mapping);
-    const correlated = indices.correlateIndices_T(remote, table, field_names);
+    const correlated = indices.legacy__correlateIndices_T(remote, table, field_names);
 
     return correlated.then(relation => {
         const ops = relation.reduce(
@@ -196,7 +196,7 @@ function updateIndices(remote, table, fk, mapping) {
 }
 
 function updateSingleIndex_Unsafe(remote, table, index, fk, field_names, field_values) {
-    return indices.fetchAddIndexKey_T(remote, table, index).then(fresh_key => {
+    return indices.legacy__fetchAddIndexKey_T(remote, table, index).then(fresh_key => {
         // FIXME: Change to new encoding
         const pk = legacyEncoding.encodeIndexPrimary(table, index, fresh_key);
         const field_keys = field_names.map(f => {
@@ -283,7 +283,7 @@ function scanIndex_T(remote, table, index_name, range) {
 
 function scanIndex_Unsafe(remote, table, index_name, range) {
     // Assumes keys are numeric
-    const f_cutoff = indices.getIndexKey_T(remote, table, index_name).then(m => {
+    const f_cutoff = indices.legacy__getIndexKey_T(remote, table, index_name).then(m => {
         return range.find(e => e > m);
     });
 

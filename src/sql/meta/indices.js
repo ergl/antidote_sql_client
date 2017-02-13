@@ -15,7 +15,7 @@ const legacyEncoding = require('./../../db/keyEncoding');
 // another transaction (given that the current API doesn't allow nested transaction).
 // In that case, all operations will be executed in the current transaction.
 //
-function addIndex_T(remote, table_name, { index_name, field_names: field_name }) {
+function addIndex(remote, table_name, { index_name, field_names: field_name }) {
     const runnable = tx => {
         const field_names = utils.arreturn(field_name);
         return schema.validateSchemaSubset(remote, table_name, field_names).then(r => {
@@ -72,29 +72,29 @@ function setIndex(remote, table_name, indices) {
 //
 // Will start a new transaction by default.
 //
-function fetchAddIndexKey_T(remote, table_name, index_name) {
+function legacy__fetchAddIndexKey_T(remote, table_name, index_name) {
     return kv.runT(remote, function(tx) {
-        return incrIndexKey(tx, table_name, index_name).then(_ct => {
-            return getIndexKey_T(tx, table_name, index_name);
+        return legacy__incrIndexKey(tx, table_name, index_name).then(_ct => {
+            return legacy__getIndexKey_T(tx, table_name, index_name);
         });
     });
 }
 
 // Atomically increment the index key counter value.
-function incrIndexKey(remote, table_name, index_name) {
-    const ref = generateIndexRef(remote, table_name, index_name);
+function legacy__incrIndexKey(remote, table_name, index_name) {
+    const ref = legacy__generateIndexRef(remote, table_name, index_name);
     return remote.update(ref.increment(1));
 }
 
-// See getIndexKey_Unsafe for details.
+// See legacy__getIndexKey_Unsafe for details.
 //
 // This function will start a new transaction by default, unless called from inside
 // another transaction (given that the current API doesn't allow nested transaction).
 // In that case, all operations will be executed in the current transaction.
 //
-function getIndexKey_T(remote, table_name, index_name) {
+function legacy__getIndexKey_T(remote, table_name, index_name) {
     return kv.runT(remote, function(tx) {
-        return getIndexKey_Unsafe(tx, table_name, index_name);
+        return legacy__getIndexKey_Unsafe(tx, table_name, index_name);
     });
 }
 
@@ -105,18 +105,18 @@ function getIndexKey_T(remote, table_name, index_name) {
 //
 // This function is unsafe. It MUST be ran inside a transaction.
 //
-function getIndexKey_Unsafe(remote, table_name, index_name) {
+function legacy__getIndexKey_Unsafe(remote, table_name, index_name) {
     return isIndex(remote, table_name, index_name).then(r => {
         if (!r) throw `${index_name} doesn't reference a field in ${table_name}`;
 
-        const ref = generateIndexRef(remote, table_name, index_name);
+        const ref = legacy__generateIndexRef(remote, table_name, index_name);
         return ref.read();
     });
 }
 
 // Given an index name, and the table it references, return
 // a reference to the index key counter.
-function generateIndexRef(remote, table_name, index_name) {
+function legacy__generateIndexRef(remote, table_name, index_name) {
     // FIXME: Change index structures
     return remote.counter(legacyEncoding.encodeIndex(table_name, index_name));
 }
@@ -149,13 +149,13 @@ function fieldsOfIndex(remote, table_name, index_name) {
     });
 }
 
-// See correlateIndices_T for details.
+// See correlateIndices_Unsafe for details.
 //
 // This function will start a new transaction by default, unless called from inside
 // another transaction (given that the current API doesn't allow nested transaction).
 // In that case, all operations will be executed in the current transaction.
 //
-function correlateIndices_T(remote, table_name, field_names) {
+function legacy__correlateIndices_T(remote, table_name, field_names) {
     return kv.runT(remote, function(tx) {
         return correlateIndices_Unsafe(tx, table_name, field_names);
     });
@@ -202,8 +202,8 @@ module.exports = {
     isIndex,
     fieldsOfIndex,
     indexOfField,
-    addIndex_T,
-    getIndexKey_T,
-    fetchAddIndexKey_T,
-    correlateIndices_T
+    addIndex,
+    legacy__getIndexKey_T,
+    legacy__fetchAddIndexKey_T,
+    legacy__correlateIndices_T
 };
