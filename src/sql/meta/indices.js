@@ -3,7 +3,6 @@ const utils = require('./../../utils');
 const kv = require('./../../db/kv');
 const schema = require('./schema');
 const keyEncoding = require('./../../kset/keyEncoding');
-const legacyEncoding = require('./../../db/keyEncoding');
 
 // Given a table name, and a map `{index_name, field_names}`,
 // create a new index named `index_name` over `table.field_name`
@@ -61,41 +60,6 @@ function setIndex(remote, table_name, indices) {
             return kv.put(tx, meta_key, Object.assign(meta, { indices }));
         });
     });
-}
-
-// See legacy__getIndexKey_Unsafe for details.
-//
-// This function will start a new transaction by default, unless called from inside
-// another transaction (given that the current API doesn't allow nested transaction).
-// In that case, all operations will be executed in the current transaction.
-//
-function legacy__getIndexKey_T(remote, table_name, index_name) {
-    return kv.runT(remote, function(tx) {
-        return legacy__getIndexKey_Unsafe(tx, table_name, index_name);
-    });
-}
-
-// Given an index name, and the table it references, return
-// the current index key counter value.
-//
-// Will fail if the given index name doesn't reference the given table.
-//
-// This function is unsafe. It MUST be ran inside a transaction.
-//
-function legacy__getIndexKey_Unsafe(remote, table_name, index_name) {
-    return isIndex(remote, table_name, index_name).then(r => {
-        if (!r) throw `${index_name} doesn't reference a field in ${table_name}`;
-
-        const ref = legacy__generateIndexRef(remote, table_name, index_name);
-        return ref.read();
-    });
-}
-
-// Given an index name, and the table it references, return
-// a reference to the index key counter.
-function legacy__generateIndexRef(remote, table_name, index_name) {
-    // FIXME: Change index structures
-    return remote.counter(legacyEncoding.encodeIndex(table_name, index_name));
 }
 
 // Given a table name and one of its fields, return a list of indexes,
@@ -180,6 +144,5 @@ module.exports = {
     fieldsOfIndex,
     indexOfField,
     addIndex,
-    legacy__getIndexKey_T,
     legacy__correlateIndices_T
 };

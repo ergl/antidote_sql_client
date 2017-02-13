@@ -7,7 +7,6 @@ const pks = require('./meta/pks');
 const fks = require('./meta/fks');
 const _schema = require('./meta/schema');
 const indices = require('./meta/indices');
-const legacyEncoding = require('../db/keyEncoding');
 const keyEncoding = require('../kset/keyEncoding');
 const tableMetadata = require('./tableMetadata');
 
@@ -280,42 +279,6 @@ function scan_T(remote, table, range) {
     });
 }
 
-function scanIndex_T(remote, table, index_name, range) {
-    return kv.runT(remote, function(tx) {
-        return scanIndex_Unsafe(tx, table, index_name, range);
-    });
-}
-
-function scanIndex_Unsafe(remote, table, index_name, range) {
-    // Assumes keys are numeric
-    const f_cutoff = indices.legacy__getIndexKey_T(remote, table, index_name).then(m => {
-        return range.find(e => e > m);
-    });
-
-    return f_cutoff
-        .then(cutoff => {
-            if (cutoff !== undefined)
-                throw `Error: scan key ${cutoff} out of valid range`;
-            return indices.fieldsOfIndex(remote, table, index_name);
-        })
-        .then(indexed_fields_names => {
-            // For every k in key range, encode k
-            const keys = utils.flatten(
-                range.map(k => {
-                    return indexed_fields_names.map(f => {
-                        // FIXME: Right now we're getting only the value, at this key
-                        // The key encodeIndexPrimary(table, index_name, k) points to the
-                        // pk key of those fields. Follow that if we need a join
-                        // FIXME: Change to new encoding
-                        return legacyEncoding.encodeIndexField(table, index_name, k, f);
-                    });
-                })
-            );
-
-            return kv.get(remote, keys);
-        });
-}
-
 // Given a table name, and a list of primary keys, will recursively
 // retrieve all the subkeys of each key, returning a list of rows.
 //
@@ -389,6 +352,5 @@ module.exports = {
     create,
     scan_T,
     select_T,
-    insertInto_T,
-    scanIndex_T
+    insertInto_T
 };
