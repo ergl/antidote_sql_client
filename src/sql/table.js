@@ -85,7 +85,7 @@ function insertInto_Unsafe(remote, table, mapping) {
             const values = field_values.concat(pk_value);
 
             return kv.put(remote, keys, values).then(_ => {
-                return updateIndices(remote, table, pk_key, mapping);
+                return updateIndices(remote, table, pk_value, mapping);
             });
         });
 }
@@ -161,20 +161,20 @@ function swapFKReferences_Unsafe(remote, table, mapping) {
     });
 }
 
-function updateIndices(remote, table, fk, mapping) {
+function updateIndices(remote, table, fk_value, mapping) {
     const field_names = Object.keys(mapping);
-    const correlated = indices.correlateIndices_T(remote, table, field_names);
+    const correlated = indices.legacy__correlateIndices_T(remote, table, field_names);
 
     return correlated.then(relation => {
         const ops = relation.reduce(
             (acc, { index_name, field_names }) => {
                 // FIXME: field f might not be in the mapping
                 const field_values = field_names.map(f => mapping[f]);
-                const pr = updateSingleIndex_Unsafe(
+                const pr = updateSingleIndex(
                     remote,
                     table,
                     index_name,
-                    fk,
+                    fk_value,
                     field_names,
                     field_values
                 );
@@ -195,21 +195,26 @@ function updateIndices(remote, table, fk, mapping) {
     });
 }
 
-function updateSingleIndex_Unsafe(remote, table, index, fk, field_names, field_values) {
-    return indices.fetchAddIndexKey_T(remote, table, index).then(fresh_key => {
-        // FIXME: Change to new encoding
-        const pk = legacyEncoding.encodeIndexPrimary(table, index, fresh_key);
-        const field_keys = field_names.map(f => {
-            // FIXME: Change to new encoding
-            return legacyEncoding.encodeIndexField(table, index, fresh_key, f);
-        });
-
-        // Make the index pk key point to the pk of the indexed table
-        const keys = field_keys.concat(pk);
-        const values = field_values.concat(fk);
-
-        return { keys, values };
+// FIXME: Generate super keys
+// When adding to the kset, we should auto-insert the appropiate super keys to support
+// subkey range scans. (Or maybe `subkeys` should be smarter thant that and derive the
+// appropiate scan.
+function updateSingleIndex(_, table, index, fk_value, field_names, field_values) {
+    const index_keys = field_names.map((fld_name, i) => {
+        return keyEncoding.index_key(
+            table,
+            index,
+            fld_name,
+            keyEncoding.d_string(field_values[i]),
+            keyEncoding.d_int(fk_value)
+        );
     });
+
+    // TODO: Don't put these keys
+    // Just sentinel keys, should add them to the kset instead
+    const index_values = field_names.map(_ => undefined);
+
+    return { keys: index_keys, values: index_values };
 }
 
 // See select_Unsafe for details.
@@ -283,7 +288,7 @@ function scanIndex_T(remote, table, index_name, range) {
 
 function scanIndex_Unsafe(remote, table, index_name, range) {
     // Assumes keys are numeric
-    const f_cutoff = indices.getIndexKey_T(remote, table, index_name).then(m => {
+    const f_cutoff = indices.legacy__getIndexKey_T(remote, table, index_name).then(m => {
         return range.find(e => e > m);
     });
 
