@@ -63,29 +63,6 @@ function setIndex(remote, table_name, indices) {
     });
 }
 
-// Given an index name, and the table it references, perform
-// a fetch-and-add on its key counter reference, and return the new value.
-//
-// This function will start a new transaction by default, unless called from inside
-// another transaction (given that the current API doesn't allow nested transaction).
-// In that case, all operations will be executed in the current transaction.
-//
-// Will start a new transaction by default.
-//
-function legacy__fetchAddIndexKey_T(remote, table_name, index_name) {
-    return kv.runT(remote, function(tx) {
-        return legacy__incrIndexKey(tx, table_name, index_name).then(_ct => {
-            return legacy__getIndexKey_T(tx, table_name, index_name);
-        });
-    });
-}
-
-// Atomically increment the index key counter value.
-function legacy__incrIndexKey(remote, table_name, index_name) {
-    const ref = legacy__generateIndexRef(remote, table_name, index_name);
-    return remote.update(ref.increment(1));
-}
-
 // See legacy__getIndexKey_Unsafe for details.
 //
 // This function will start a new transaction by default, unless called from inside
@@ -204,6 +181,5 @@ module.exports = {
     indexOfField,
     addIndex,
     legacy__getIndexKey_T,
-    legacy__fetchAddIndexKey_T,
     legacy__correlateIndices_T
 };

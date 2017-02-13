@@ -12,6 +12,10 @@ function wrap_field(t, n, fl) {
     return kset.repr(kset.field(t, n, fl));
 }
 
+function wrap_index_key(t, i, f, v, k) {
+    return kset.repr(kset.index_key(t, i, f, v, k))
+}
+
 module.exports = {
     d_int: kset.d_int,
     d_float: kset.d_float,
@@ -19,6 +23,6 @@ module.exports = {
     table: wrap_table,
     spk: wrap_spk,
     field: wrap_field,
-    index_key: kset.index_key,
+    index_key: wrap_index_key,
     uindex_key: kset.uindex_key
 };
