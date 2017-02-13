@@ -39,6 +39,30 @@ function field(t, n, name) {
     ]);
 }
 
+function raw_index(t, i) {
+    return /* KTable */ Block.__(0, [t, /* KIndex */ Block.__(4, [i, /* Bottom */ 0])]);
+}
+
+function raw_index_field(t, i, f) {
+    return /* KTable */ Block.__(0, [
+        t,
+        /* KIndex */ Block.__(4, [i, /* KIndexField */ Block.__(5, [f, /* Bottom */ 0])])
+    ]);
+}
+
+function raw_index_field_value(t, i, f, v) {
+    return /* KTable */ Block.__(0, [
+        t,
+        /* KIndex */ Block.__(4, [
+            i,
+            /* KIndexField */ Block.__(5, [
+                f,
+                /* KIndexFieldValue */ Block.__(6, [v, /* Bottom */ 0])
+            ])
+        ])
+    ]);
+}
+
 function index_key(t, i, f, v, k) {
     return /* KTable */ Block.__(0, [
         t,
@@ -51,6 +75,16 @@ function index_key(t, i, f, v, k) {
                     /* KIndexFieldKey */ Block.__(7, [k])
                 ])
             ])
+        ])
+    ]);
+}
+
+function raw_uindex_field(t, i, f) {
+    return /* KTable */ Block.__(0, [
+        t,
+        /* KUIndex */ Block.__(8, [
+            i,
+            /* KUIndexField */ Block.__(9, [f, /* Bottom */ 0])
         ])
     ]);
 }
@@ -180,7 +214,7 @@ function repr(k) {
     } else {
         throw [
             Caml_builtin_exceptions.match_failure,
-            ['/Users/ryan/dev/kset/src/kset.ml', 57, 11]
+            ['/Users/ryan/dev/kset/src/kset.ml', 109, 11]
         ];
     }
 }
@@ -663,35 +697,117 @@ function is_same_level(param) {
                 case 4:
                     var match$11 = match$1[1];
                     if (typeof match$11 === 'number') {
-                        return /* false */ 0;
-                    } else if (match$11.tag === 5) {
-                        var match$12 = match$11[1];
-                        if (typeof match$12 === 'number') {
+                        if (match$11) {
                             return /* false */ 0;
-                        } else if (match$12.tag === 6) {
-                            var $js$4 = match$12[1];
-                            if (typeof $js$4 === 'number') {
+                        } else {
+                            var match$12 = param[1];
+                            if (typeof match$12 === 'number') {
                                 return /* false */ 0;
-                            } else if ($js$4.tag === 7) {
-                                var match$13 = param[1];
-                                if (typeof match$13 === 'number') {
-                                    return /* false */ 0;
-                                } else if (match$13.tag) {
+                            } else if (match$12.tag) {
+                                return /* false */ 0;
+                            } else {
+                                var match$13 = match$12[1];
+                                if (
+                                    typeof match$13 === 'number' ||
+                                        !(match$13.tag === 4 &&
+                                            typeof match$13[1] === 'number')
+                                ) {
                                     return /* false */ 0;
                                 } else {
-                                    var match$14 = match$13[1];
-                                    if (typeof match$14 === 'number') {
+                                    return /* true */ 1;
+                                }
+                            }
+                        }
+                    } else if (match$11.tag === 5) {
+                        var match$14 = match$11[1];
+                        if (typeof match$14 === 'number') {
+                            if (match$14) {
+                                return /* false */ 0;
+                            } else {
+                                var match$15 = param[1];
+                                if (typeof match$15 === 'number') {
+                                    return /* false */ 0;
+                                } else if (match$15.tag) {
+                                    return /* false */ 0;
+                                } else {
+                                    var match$16 = match$15[1];
+                                    if (typeof match$16 === 'number') {
                                         return /* false */ 0;
-                                    } else if (match$14.tag === 4) {
-                                        var match$15 = match$14[1];
-                                        if (typeof match$15 === 'number') {
+                                    } else if (match$16.tag === 4) {
+                                        var match$17 = match$16[1];
+                                        if (
+                                            typeof match$17 === 'number' ||
+                                                !(match$17.tag === 5 &&
+                                                    typeof match$17[1] === 'number')
+                                        ) {
                                             return /* false */ 0;
-                                        } else if (match$15.tag === 5) {
-                                            var match$16 = match$15[1];
-                                            if (typeof match$16 === 'number') {
+                                        } else {
+                                            return /* true */ 1;
+                                        }
+                                    } else {
+                                        return /* false */ 0;
+                                    }
+                                }
+                            }
+                        } else if (match$14.tag === 6) {
+                            var $js$4 = match$14[1];
+                            if (typeof $js$4 === 'number') {
+                                if ($js$4) {
+                                    return /* false */ 0;
+                                } else {
+                                    var match$18 = param[1];
+                                    if (typeof match$18 === 'number') {
+                                        return /* false */ 0;
+                                    } else if (match$18.tag) {
+                                        return /* false */ 0;
+                                    } else {
+                                        var match$19 = match$18[1];
+                                        if (typeof match$19 === 'number') {
+                                            return /* false */ 0;
+                                        } else if (match$19.tag === 4) {
+                                            var match$20 = match$19[1];
+                                            if (typeof match$20 === 'number') {
                                                 return /* false */ 0;
-                                            } else if (match$16.tag === 6) {
-                                                var $js$5 = match$16[1];
+                                            } else if (match$20.tag === 5) {
+                                                var match$21 = match$20[1];
+                                                if (
+                                                    typeof match$21 === 'number' ||
+                                                        !(match$21.tag === 6 &&
+                                                            typeof match$21[1] ===
+                                                                'number')
+                                                ) {
+                                                    return /* false */ 0;
+                                                } else {
+                                                    return /* true */ 1;
+                                                }
+                                            } else {
+                                                return /* false */ 0;
+                                            }
+                                        } else {
+                                            return /* false */ 0;
+                                        }
+                                    }
+                                }
+                            } else if ($js$4.tag === 7) {
+                                var match$22 = param[1];
+                                if (typeof match$22 === 'number') {
+                                    return /* false */ 0;
+                                } else if (match$22.tag) {
+                                    return /* false */ 0;
+                                } else {
+                                    var match$23 = match$22[1];
+                                    if (typeof match$23 === 'number') {
+                                        return /* false */ 0;
+                                    } else if (match$23.tag === 4) {
+                                        var match$24 = match$23[1];
+                                        if (typeof match$24 === 'number') {
+                                            return /* false */ 0;
+                                        } else if (match$24.tag === 5) {
+                                            var match$25 = match$24[1];
+                                            if (typeof match$25 === 'number') {
+                                                return /* false */ 0;
+                                            } else if (match$25.tag === 6) {
+                                                var $js$5 = match$25[1];
                                                 if (
                                                     typeof $js$5 === 'number' ||
                                                         $js$5.tag !== 7
@@ -721,29 +837,76 @@ function is_same_level(param) {
                     }
                     break;
                 case 8:
-                    var match$17 = match$1[1];
-                    if (typeof match$17 === 'number') {
-                        return /* false */ 0;
-                    } else if (match$17.tag === 9) {
-                        var $js$6 = match$17[1];
-                        if (typeof $js$6 === 'number') {
+                    var match$26 = match$1[1];
+                    if (typeof match$26 === 'number') {
+                        if (match$26) {
                             return /* false */ 0;
-                        } else if ($js$6.tag === 10) {
-                            var match$18 = param[1];
-                            if (typeof match$18 === 'number') {
+                        } else {
+                            var match$27 = param[1];
+                            if (typeof match$27 === 'number') {
                                 return /* false */ 0;
-                            } else if (match$18.tag) {
+                            } else if (match$27.tag) {
                                 return /* false */ 0;
                             } else {
-                                var match$19 = match$18[1];
-                                if (typeof match$19 === 'number') {
+                                var match$28 = match$27[1];
+                                if (
+                                    typeof match$28 === 'number' ||
+                                        !(match$28.tag === 8 &&
+                                            typeof match$28[1] === 'number')
+                                ) {
                                     return /* false */ 0;
-                                } else if (match$19.tag === 8) {
-                                    var match$20 = match$19[1];
-                                    if (typeof match$20 === 'number') {
+                                } else {
+                                    return /* true */ 1;
+                                }
+                            }
+                        }
+                    } else if (match$26.tag === 9) {
+                        var $js$6 = match$26[1];
+                        if (typeof $js$6 === 'number') {
+                            if ($js$6) {
+                                return /* false */ 0;
+                            } else {
+                                var match$29 = param[1];
+                                if (typeof match$29 === 'number') {
+                                    return /* false */ 0;
+                                } else if (match$29.tag) {
+                                    return /* false */ 0;
+                                } else {
+                                    var match$30 = match$29[1];
+                                    if (typeof match$30 === 'number') {
                                         return /* false */ 0;
-                                    } else if (match$20.tag === 9) {
-                                        var $js$7 = match$20[1];
+                                    } else if (match$30.tag === 8) {
+                                        var match$31 = match$30[1];
+                                        if (
+                                            typeof match$31 === 'number' ||
+                                                !(match$31.tag === 9 &&
+                                                    typeof match$31[1] === 'number')
+                                        ) {
+                                            return /* false */ 0;
+                                        } else {
+                                            return /* true */ 1;
+                                        }
+                                    } else {
+                                        return /* false */ 0;
+                                    }
+                                }
+                            }
+                        } else if ($js$6.tag === 10) {
+                            var match$32 = param[1];
+                            if (typeof match$32 === 'number') {
+                                return /* false */ 0;
+                            } else if (match$32.tag) {
+                                return /* false */ 0;
+                            } else {
+                                var match$33 = match$32[1];
+                                if (typeof match$33 === 'number') {
+                                    return /* false */ 0;
+                                } else if (match$33.tag === 8) {
+                                    var match$34 = match$33[1];
+                                    if (typeof match$34 === 'number') {
+                                        return /* false */ 0;
+                                    } else if (match$34.tag === 9) {
+                                        var $js$7 = match$34[1];
                                         if (
                                             typeof $js$7 === 'number' || $js$7.tag !== 10
                                         ) {
@@ -846,7 +1009,11 @@ exports.d_string = d_string;
 exports.table = table;
 exports.spk = spk;
 exports.field = field;
+exports.raw_index = raw_index;
+exports.raw_index_field = raw_index_field;
+exports.raw_index_field_value = raw_index_field_value;
 exports.index_key = index_key;
+exports.raw_uindex_field = raw_uindex_field;
 exports.uindex_key = uindex_key;
 exports.repr = repr;
 exports.empty = empty;

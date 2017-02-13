@@ -1,8 +1,8 @@
 const kv = require('./../db/kv');
-const keyEncoding = require('./../db/keyEncoding');
+const keyEncoding = require('./../kset/keyEncoding');
 
 function createMeta(remote, table_name, pk_field, schema) {
-    const meta_key = keyEncoding.encodeTableName(table_name);
+    const meta_key = keyEncoding.table(table_name)
     const meta_content = {
         fks: [],
         indices: [],
