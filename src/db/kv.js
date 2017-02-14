@@ -53,7 +53,7 @@ function put(remote, key, value) {
 
 // condPut(_, k, v, e) will succeed iff get(_, k) = e
 function condPut(remote, key, value, expected) {
-    const run = tx => {
+    return runT(remote, function(tx) {
         return get(tx, key).then(vs => {
             const exp = utils.arreturn(expected);
 
@@ -68,10 +68,7 @@ function condPut(remote, key, value, expected) {
 
             return put(tx, key, value);
         });
-    };
-
-    // Only care about commit time
-    return runT(remote, run);
+    });
 }
 
 function get(remote, key) {
