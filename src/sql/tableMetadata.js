@@ -2,7 +2,7 @@ const kv = require('./../db/kv');
 const keyEncoding = require('./../kset/keyEncoding');
 
 function createMeta(remote, table_name, pk_field, schema) {
-    const meta_key = keyEncoding.table(table_name)
+    const meta_key = keyEncoding.table(table_name);
     const meta_content = {
         fks: [],
         indices: [],
@@ -11,7 +11,7 @@ function createMeta(remote, table_name, pk_field, schema) {
         primary_key_field: pk_field
     };
 
-    return kv.put(remote, meta_key, meta_content);
+    return kv.put({ remote, kset: undefined }, meta_key, meta_content);
 }
 
 module.exports = {

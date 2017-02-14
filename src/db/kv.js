@@ -33,16 +33,18 @@ function runT(remote, fn) {
         return fn(remote);
     }
 
-    const runnable = tx => {
+    const runnable = tx_handle => {
+        const tx = { remote: tx_handle, kset: undefined };
         return fn(tx).then(v => {
-            return commitT(tx).then(ct => ({ ct, result: v }));
+            return commitT(tx.remote).then(ct => ({ ct, result: v }));
         });
     };
 
     return startT(remote).then(runnable);
 }
 
-function put(remote, key, value) {
+// TODO: Use kset
+function put({ remote, kset }, key, value) {
     const keys = utils.arreturn(key);
     const values = utils.arreturn(value);
 
@@ -71,7 +73,7 @@ function condPut(remote, key, value, expected) {
     });
 }
 
-function get(remote, key) {
+function get({ remote, kset }, key) {
     const keys = utils.arreturn(key);
     const refs = keys.map(k => generateRef(remote, k));
     return remote.readBatch(refs);
