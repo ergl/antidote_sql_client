@@ -17,7 +17,7 @@ const keyEncoding = require('./../../kset/keyEncoding');
 function addIndex(remote, table_name, { index_name, field_names: field_name }) {
     const runnable = tx => {
         const field_names = utils.arreturn(field_name);
-        return schema.validateSchemaSubset(remote, table_name, field_names).then(r => {
+        return schema.validateSchemaSubset(tx, table_name, field_names).then(r => {
             if (!r) throw "Can't add index on non-existent fields";
 
             return getIndices(tx, table_name).then(index_table => {
