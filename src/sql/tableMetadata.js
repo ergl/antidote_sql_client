@@ -11,7 +11,9 @@ function createMeta(remote, table_name, pk_field, schema) {
         primary_key_field: pk_field
     };
 
-    return kv.put({ remote, kset: undefined }, meta_key, meta_content);
+    return kv.runT(remote, function(tx) {
+        return kv.put(tx, meta_key, meta_content);
+    });
 }
 
 module.exports = {
