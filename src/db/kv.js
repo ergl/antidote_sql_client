@@ -1,6 +1,8 @@
-const utils = require('./../utils');
-
 const antidote_client = require('antidote_ts_client');
+
+const utils = require('./../utils');
+const keyEncoding = require('./../kset/keyEncoding');
+const orderedKeySet = require('./../kset/orderedKeySet');
 
 function createRemote(port, url, opts = { bucket: 'default-bucket' }) {
     const remote = antidote_client.connect(port, url);
@@ -26,6 +28,18 @@ function commitT(remote) {
     return remote.commit();
 }
 
+function read_set(remote) {
+    const set_key = keyEncoding.set_key();
+    const ref = generateRef(remote, set_key);
+    return ref.read().then(v => v).catch(_ => orderedKeySet.empty);
+}
+
+function write_set({ remote, kset }) {
+    const set_key = keyEncoding.set_key();
+    const ref = generateRef(remote, set_key);
+    return remote.update(ref.set(kset));
+}
+
 function runT(remote, fn) {
     // If the given remote is a transaction handle,
     // execute the function with the current one.
@@ -34,10 +48,13 @@ function runT(remote, fn) {
     }
 
     const runnable = tx_handle => {
-        const tx = { remote: tx_handle, kset: undefined };
-        return fn(tx).then(v => {
-            return commitT(tx.remote).then(ct => ({ ct, result: v }));
-        });
+        return read_set(tx_handle)
+            .then(set => ({ remote: tx_handle, kset: set }))
+            .then(tx => fn(tx).then(v => {
+                return write_set(tx).then(_ => {
+                    return commitT(tx.remote).then(ct => ({ ct, result: v }));
+                });
+            }));
     };
 
     return startT(remote).then(runnable);
