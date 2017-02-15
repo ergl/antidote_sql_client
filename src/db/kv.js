@@ -28,6 +28,10 @@ function commitT(remote) {
     return remote.commit();
 }
 
+function abortT(remote) {
+    return remote.abort();
+}
+
 function read_set(remote) {
     const set_key = keyEncoding.set_key();
     const ref = generateRef(remote, set_key);
@@ -50,11 +54,13 @@ function runT(remote, fn) {
     const runnable = tx_handle => {
         return read_set(tx_handle)
             .then(set => ({ remote: tx_handle, kset: set }))
-            .then(tx => fn(tx).then(v => {
-                return write_set(tx).then(_ => {
-                    return commitT(tx.remote).then(ct => ({ ct, result: v }));
-                });
-            }));
+            .then(tx => fn(tx).then(v => write_set(tx).then(_ => {
+                return commitT(tx.remote).then(ct => ({ ct, result: v }));
+            })))
+            .catch(e => {
+                console.error('Transaction aborted, reason:', e);
+                return abortT(tx_handle);
+            });
     };
 
     return startT(remote).then(runnable);
