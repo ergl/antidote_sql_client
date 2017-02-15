@@ -1,6 +1,6 @@
 const kset = require('./internal/kset');
 
-const SET_KEY = kset.d_string('$$__ML_KSET__$$');
+const SET_KEY = '$$__ML_KSET__$$';
 
 function set_key() {
     return SET_KEY;
