@@ -1,7 +1,7 @@
 const utils = require('../../utils');
 
 const kv = require('./../../db/kv');
-const keyEncoding = require('./../../kset/keyEncoding');
+const keyEncoding = require('./../../db/keyEncoding');
 
 // Get the field list of the given table
 // If the table doesn't exist, return the empty list

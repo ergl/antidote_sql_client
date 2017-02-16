@@ -2,7 +2,7 @@ const utils = require('../../utils/index');
 
 const schema = require('./schema');
 const kv = require('./../../db/kv');
-const keyEncoding = require('./../../kset/keyEncoding');
+const keyEncoding = require('./../../db/keyEncoding');
 
 // See addFK_Unsafe for details.
 //

@@ -1,4 +1,4 @@
-const kset = require('./internal/kset');
+const kset = require('kset');
 
 const SET_KEY = '$$__ML_KSET__$$';
 
@@ -31,5 +31,6 @@ module.exports = {
     spk: wrap_spk,
     field: wrap_field,
     index_key: wrap_index_key,
-    uindex_key: kset.uindex_key
+    uindex_key: kset.uindex_key,
+    toString: kset.repr
 };

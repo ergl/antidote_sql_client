@@ -2,7 +2,7 @@ const utils = require('./../../utils');
 
 const kv = require('./../../db/kv');
 const schema = require('./schema');
-const keyEncoding = require('./../../kset/keyEncoding');
+const keyEncoding = require('./../../db/keyEncoding');
 
 // Given a table name, and a map `{index_name, field_names}`,
 // create a new index named `index_name` over `table.field_name`
