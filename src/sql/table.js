@@ -7,7 +7,7 @@ const pks = require('./meta/pks');
 const fks = require('./meta/fks');
 const _schema = require('./meta/schema');
 const indices = require('./meta/indices');
-const keyEncoding = require('../kset/keyEncoding');
+const keyEncoding = require('../db/keyEncoding');
 const tableMetadata = require('./tableMetadata');
 
 // TODO: Support user-defined primary keys (and non-numeric)

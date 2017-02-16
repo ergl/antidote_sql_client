@@ -1,6 +1,8 @@
-const utils = require('./../utils');
-
 const antidote_client = require('antidote_ts_client');
+
+const utils = require('./../utils');
+const keyEncoding = require('./../kset/keyEncoding');
+const orderedKeySet = require('./../kset/orderedKeySet');
 
 function createRemote(port, url, opts = { bucket: 'default-bucket' }) {
     const remote = antidote_client.connect(port, url);
@@ -26,6 +28,24 @@ function commitT(remote) {
     return remote.commit();
 }
 
+function abortT(remote) {
+    return remote.abort();
+}
+
+function read_set(remote) {
+    const set_key = keyEncoding.set_key();
+    const ref = generateRef(remote, set_key);
+    return ref.read().then(v => {
+        return v === null ? orderedKeySet.empty : v;
+    });
+}
+
+function write_set({ remote, kset }) {
+    const set_key = keyEncoding.set_key();
+    const ref = generateRef(remote, set_key);
+    return remote.update(ref.set(kset));
+}
+
 function runT(remote, fn) {
     // If the given remote is a transaction handle,
     // execute the function with the current one.
@@ -33,16 +53,23 @@ function runT(remote, fn) {
         return fn(remote);
     }
 
-    const runnable = tx => {
-        return fn(tx).then(v => {
-            return commitT(tx).then(ct => ({ ct, result: v }));
-        });
+    const runnable = tx_handle => {
+        return read_set(tx_handle)
+            .then(set => ({ remote: tx_handle, kset: set }))
+            .then(tx => fn(tx).then(v => write_set(tx).then(_ => {
+                return commitT(tx.remote).then(ct => ({ ct, result: v }));
+            })))
+            .catch(e => {
+                console.error('Transaction aborted, reason:', e);
+                return abortT(tx_handle);
+            });
     };
 
     return startT(remote).then(runnable);
 }
 
-function put(remote, key, value) {
+// TODO: Use kset
+function put({ remote, kset }, key, value) {
     const keys = utils.arreturn(key);
     const values = utils.arreturn(value);
 
@@ -53,7 +80,7 @@ function put(remote, key, value) {
 
 // condPut(_, k, v, e) will succeed iff get(_, k) = e
 function condPut(remote, key, value, expected) {
-    const run = tx => {
+    return runT(remote, function(tx) {
         return get(tx, key).then(vs => {
             const exp = utils.arreturn(expected);
 
@@ -68,13 +95,10 @@ function condPut(remote, key, value, expected) {
 
             return put(tx, key, value);
         });
-    };
-
-    // Only care about commit time
-    return runT(remote, run);
+    });
 }
 
-function get(remote, key) {
+function get({ remote, kset }, key) {
     const keys = utils.arreturn(key);
     const refs = keys.map(k => generateRef(remote, k));
     return remote.readBatch(refs);

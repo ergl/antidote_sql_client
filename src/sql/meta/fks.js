@@ -2,7 +2,7 @@ const utils = require('../../utils/index');
 
 const schema = require('./schema');
 const kv = require('./../../db/kv');
-const keyEncoding = require('./../../kset/keyEncoding');
+const keyEncoding = require('./../../db/keyEncoding');
 
 // See addFK_Unsafe for details.
 //
@@ -80,6 +80,7 @@ function setFK(remote, table_name, fks) {
     });
 }
 
+// TODO: Remove if deleted
 // Given a table name and one of its field, return a list of reference tables
 // if that field is a foreign key, or the empty list otherwise.
 function getForeignTable(remote, table_name, fk_field) {
@@ -130,6 +131,5 @@ function correlateFKs_Unsafe(remote, table_name, field_name) {
 module.exports = {
     isFK,
     addFK_T,
-    getForeignTable,
     correlateFKs_T
 };

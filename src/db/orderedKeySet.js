@@ -1,4 +1,4 @@
-const kset = require('./internal/kset');
+const kset = require('kset');
 const List = require('bs-platform/lib/js/list');
 
 const ML_BOTTOM = '$$__ML_BOTTOM__$$';
@@ -48,6 +48,10 @@ function wrap_batch(ini, fin) {
     return unwrap_js_t_list(kset.batch(ini, fin));
 }
 
+function wrap_contents(t) {
+    return unwrap_js_t_list(kset.contents(t)).map(kset.repr);
+}
+
 module.exports = {
     empty: kset.empty,
     add: kset.add,
@@ -55,5 +59,6 @@ module.exports = {
     next_key: kset.next_key,
     prev_key: kset.prev_key,
     subkeys: wrap_subkeys,
-    batch: wrap_batch
+    batch: wrap_batch,
+    contents: wrap_contents
 };

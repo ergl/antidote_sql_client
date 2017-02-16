@@ -1,5 +1,5 @@
 const kv = require('./../../db/kv');
-const keyEncoding = require('./../../kset/keyEncoding');
+const keyEncoding = require('./../../db/keyEncoding');
 
 // Given a table name, return the name of the field
 // that acts as primary key for the table.
