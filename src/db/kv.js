@@ -1,8 +1,8 @@
 const antidote_client = require('antidote_ts_client');
 
 const utils = require('./../utils');
-const keyEncoding = require('./../kset/keyEncoding');
-const orderedKeySet = require('./../kset/orderedKeySet');
+const keyEncoding = require('./keyEncoding');
+const orderedKeySet = require('./orderedKeySet');
 
 function createRemote(port, url, opts = { bucket: 'default-bucket' }) {
     const remote = antidote_client.connect(port, url);
