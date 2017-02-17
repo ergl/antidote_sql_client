@@ -48,7 +48,7 @@ function addFK_Unsafe(remote, table_name, mapping) {
     });
 
     return check.then(r => {
-        if (!r) throw "Can't add fk on non-existent field";
+        if (!r) throw new Error("Can't add fk on non-existent field");
 
         return getFKs(remote, table_name).then(fk_tuples => {
             return setFK(remote, table_name, fk_tuples.concat(table_mapping));

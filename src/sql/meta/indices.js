@@ -18,12 +18,12 @@ function addIndex(remote, table_name, { index_name, field_names: field_name }) {
     const runnable = tx => {
         const field_names = utils.arreturn(field_name);
         return schema.validateSchemaSubset(tx, table_name, field_names).then(r => {
-            if (!r) throw "Can't add index on non-existent fields";
+            if (!r) throw new Error("Can't add index on non-existent fields");
 
             return getIndices(tx, table_name).then(index_table => {
                 const names = index_table.map(st => st.index_name);
                 if (names.includes(index_name)) {
-                    throw `Can't override index ${index_name}`;
+                    throw new Error(`Can't override index ${index_name}`);
                 }
 
                 return setIndex(

@@ -17,7 +17,7 @@ function closeRemote(remote) {
 // The interface for connections and transaction handles is pretty much
 // identical, but the current API doesn't allow nested transaction.
 function isTxHandle(remote) {
-    if (remote === undefined) throw 'Undefined remote';
+    if (remote === undefined) throw new Error('Undefined remote');
     return !remote.hasOwnProperty('minSnapshotTime');
 }
 
@@ -72,7 +72,7 @@ function runT(remote, fn) {
 }
 
 function put({ remote, kset }, key, value) {
-    if (!isTxHandle(remote)) throw 'Calling put outside a transaction';
+    if (!isTxHandle(remote)) throw new Error('Calling put outside a transaction');
 
     const keys = utils.arreturn(key);
     const readable_keys = keys.map(({ key }) => keyEncoding.toString(key));
@@ -94,12 +94,12 @@ function condPut(remote, key, value, expected) {
             const exp = utils.arreturn(expected);
 
             if (exp.length !== vs.length) {
-                throw `ConditionalPut failed, expected ${expected}, got ${vs}`;
+                throw new Error(`ConditionalPut failed, expected ${expected}, got ${vs}`);
             }
 
             const equals = exp.every((elt, idx) => elt === vs[idx]);
             if (!equals) {
-                throw `Condional put failed, expected ${expected}, got ${vs}`;
+                throw new Error(`Condional put failed, expected ${expected}, got ${vs}`);
             }
 
             return put(tx, key, value);
@@ -108,7 +108,7 @@ function condPut(remote, key, value, expected) {
 }
 
 function get({ remote }, key) {
-    if (!isTxHandle(remote)) throw 'Calling get outside a transaction';
+    if (!isTxHandle(remote)) throw new Error('Calling get outside a transaction');
 
     const keys = utils.arreturn(key);
     const readable_keys = keys.map(({ key }) => keyEncoding.toString(key));
