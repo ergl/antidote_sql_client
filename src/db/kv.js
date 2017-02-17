@@ -60,8 +60,10 @@ function runT(remote, fn) {
                 return commitT(tx.remote).then(ct => ({ ct, result: v }));
             })))
             .catch(e => {
-                console.error('Transaction aborted, reason:', e);
-                return abortT(tx_handle);
+                return abortT(tx_handle).then(_ => {
+                    console.error('Transaction aborted, reason:', e);
+                    throw e;
+                });
             });
     };
 
