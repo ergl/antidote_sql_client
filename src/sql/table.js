@@ -62,13 +62,13 @@ function insertInto_Unsafe(remote, table, mapping) {
             // Easily solvable by inserting a bottom value.
             // TODO: Add bottom value for nullable fields
             return _schema.validateSchema(remote, table, schema).then(r => {
-                if (!r) throw 'Invalid schema';
+                if (!r) throw new Error('Invalid schema');
 
                 return swapFKReferences_Unsafe(remote, table, mapping);
             });
         })
         .then(({ valid, result }) => {
-            if (!valid) throw 'FK constraint failed';
+            if (!valid) throw new Error('FK constraint failed');
             const f_pk_value = pks.fetchAddPrimaryKey_T(remote, table);
             return f_pk_value.then(pk_value => ({ pk_value, result }));
         })
@@ -129,7 +129,7 @@ function swapFKReferences_Unsafe(remote, table, mapping) {
                 });
 
             return valid.then(v => {
-                if (!v) throw 'FK constraint failed';
+                if (!v) throw new Error('FK constraint failed');
                 return {
                     k: field_name,
                     v: keyEncoding.spk(table, keyEncoding.d_int(mapping[field_name]))
@@ -262,7 +262,7 @@ function select_Unsafe(remote, table, field, pk_value) {
     }
 
     return _schema.validateSchemaSubset(remote, table, fields).then(r => {
-        if (!r) throw 'Invalid schema';
+        if (!r) throw new Error('Invalid schema');
         return perform_scan(fields);
     });
 }
@@ -297,7 +297,7 @@ function scan_Unsafe(remote, table, range) {
     return f_cutoff
         .then(cutoff => {
             if (cutoff !== undefined)
-                throw `Error: scan key ${cutoff} out of valid range`;
+                throw new Error(`scan of key ${cutoff} is out of valid range`);
             return _schema.getSchema(remote, table);
         })
         .then(schema => {

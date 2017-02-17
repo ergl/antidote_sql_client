@@ -7,19 +7,19 @@ function set_key() {
 }
 
 function wrap_table(t) {
-    return kset.repr(kset.table(t));
+    return { key: kset.table(t) };
 }
 
 function wrap_spk(t, any) {
-    return kset.repr(kset.spk(t, any));
+    return { key: kset.spk(t, any) };
 }
 
 function wrap_field(t, n, fl) {
-    return kset.repr(kset.field(t, n, fl));
+    return { key: kset.field(t, n, fl) };
 }
 
 function wrap_index_key(t, i, f, v, k) {
-    return kset.repr(kset.index_key(t, i, f, v, k));
+    return { key: kset.index_key(t, i, f, v, k) };
 }
 
 module.exports = {

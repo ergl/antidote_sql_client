@@ -17,6 +17,7 @@ function closeRemote(remote) {
 // The interface for connections and transaction handles is pretty much
 // identical, but the current API doesn't allow nested transaction.
 function isTxHandle(remote) {
+    if (remote === undefined) throw new Error('Undefined remote');
     return !remote.hasOwnProperty('minSnapshotTime');
 }
 
@@ -60,22 +61,30 @@ function runT(remote, fn) {
                 return commitT(tx.remote).then(ct => ({ ct, result: v }));
             })))
             .catch(e => {
-                console.error('Transaction aborted, reason:', e);
-                return abortT(tx_handle);
+                return abortT(tx_handle).then(_ => {
+                    console.error('Transaction aborted, reason:', e);
+                    throw e;
+                });
             });
     };
 
     return startT(remote).then(runnable);
 }
 
-// TODO: Use kset
 function put({ remote, kset }, key, value) {
+    if (!isTxHandle(remote)) throw new Error('Calling put outside a transaction');
+
     const keys = utils.arreturn(key);
+    const readable_keys = keys.map(({ key }) => keyEncoding.toString(key));
     const values = utils.arreturn(value);
 
-    const refs = keys.map(k => generateRef(remote, k));
+    const refs = readable_keys.map(k => generateRef(remote, k));
     const ops = refs.map((r, i) => r.set(values[i]));
-    return remote.update(ops);
+    // If put is successful, add the keys to the kset
+    return remote.update(ops).then(ct => {
+        keys.forEach(({ key }) => orderedKeySet.add(key, kset));
+        return ct;
+    });
 }
 
 // condPut(_, k, v, e) will succeed iff get(_, k) = e
@@ -85,12 +94,12 @@ function condPut(remote, key, value, expected) {
             const exp = utils.arreturn(expected);
 
             if (exp.length !== vs.length) {
-                throw `ConditionalPut failed, expected ${expected}, got ${vs}`;
+                throw new Error(`ConditionalPut failed, expected ${expected}, got ${vs}`);
             }
 
             const equals = exp.every((elt, idx) => elt === vs[idx]);
             if (!equals) {
-                throw `Condional put failed, expected ${expected}, got ${vs}`;
+                throw new Error(`Condional put failed, expected ${expected}, got ${vs}`);
             }
 
             return put(tx, key, value);
@@ -98,9 +107,13 @@ function condPut(remote, key, value, expected) {
     });
 }
 
-function get({ remote, kset }, key) {
+function get({ remote }, key) {
+    if (!isTxHandle(remote)) throw new Error('Calling get outside a transaction');
+
     const keys = utils.arreturn(key);
-    const refs = keys.map(k => generateRef(remote, k));
+    const readable_keys = keys.map(({ key }) => keyEncoding.toString(key));
+
+    const refs = readable_keys.map(k => generateRef(remote, k));
     return remote.readBatch(refs);
 }
 
