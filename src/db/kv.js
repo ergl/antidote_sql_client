@@ -17,6 +17,7 @@ function closeRemote(remote) {
 // The interface for connections and transaction handles is pretty much
 // identical, but the current API doesn't allow nested transaction.
 function isTxHandle(remote) {
+    if (remote === undefined) throw 'Undefined remote';
     return !remote.hasOwnProperty('minSnapshotTime');
 }
 
@@ -72,6 +73,8 @@ function runT(remote, fn) {
 
 // TODO: Use kset
 function put({ remote, kset }, key, value) {
+    if (!isTxHandle(remote)) throw 'Calling put outside a transaction';
+
     const keys = utils.arreturn(key);
     const values = utils.arreturn(value);
 
@@ -101,6 +104,8 @@ function condPut(remote, key, value, expected) {
 }
 
 function get({ remote, kset }, key) {
+    if (!isTxHandle(remote)) throw 'Calling get outside a transaction';
+
     const keys = utils.arreturn(key);
     const refs = keys.map(k => generateRef(remote, k));
     return remote.readBatch(refs);
