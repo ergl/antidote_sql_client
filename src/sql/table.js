@@ -297,7 +297,9 @@ function scan_Unsafe(remote, table, range) {
     return f_cutoff
         .then(cutoff => {
             if (cutoff !== undefined) {
-                throw new Error(`scan of key ${cutoff} on ${table} is out of valid range`);
+                throw new Error(
+                    `scan of key ${cutoff} on ${table} is out of valid range`
+                );
             }
 
             return _schema.getSchema(remote, table);
