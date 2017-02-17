@@ -103,7 +103,7 @@ function condPut(remote, key, value, expected) {
     });
 }
 
-function get({ remote, kset }, key) {
+function get({ remote }, key) {
     if (!isTxHandle(remote)) throw 'Calling get outside a transaction';
 
     const keys = utils.arreturn(key);
