@@ -71,16 +71,20 @@ function runT(remote, fn) {
     return startT(remote).then(runnable);
 }
 
-// TODO: Use kset
 function put({ remote, kset }, key, value) {
     if (!isTxHandle(remote)) throw 'Calling put outside a transaction';
 
     const keys = utils.arreturn(key);
+    const readable_keys = keys.map(({ key }) => keyEncoding.toString(key));
     const values = utils.arreturn(value);
 
-    const refs = keys.map(k => generateRef(remote, k));
+    const refs = readable_keys.map(k => generateRef(remote, k));
     const ops = refs.map((r, i) => r.set(values[i]));
-    return remote.update(ops);
+    // If put is successful, add the keys to the kset
+    return remote.update(ops).then(ct => {
+        keys.forEach(({ key }) => orderedKeySet.add(key, kset));
+        return ct;
+    });
 }
 
 // condPut(_, k, v, e) will succeed iff get(_, k) = e
@@ -107,7 +111,9 @@ function get({ remote }, key) {
     if (!isTxHandle(remote)) throw 'Calling get outside a transaction';
 
     const keys = utils.arreturn(key);
-    const refs = keys.map(k => generateRef(remote, k));
+    const readable_keys = keys.map(({ key }) => keyEncoding.toString(key));
+
+    const refs = readable_keys.map(k => generateRef(remote, k));
     return remote.readBatch(refs);
 }
 
