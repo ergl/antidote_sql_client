@@ -139,9 +139,6 @@ function isIndex(remote, table_name, idx_name) {
 }
 
 module.exports = {
-    isIndex,
-    fieldsOfIndex,
-    indexOfField,
     addIndex,
     legacy__correlateIndices_T
 };
