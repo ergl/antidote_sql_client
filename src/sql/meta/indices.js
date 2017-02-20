@@ -38,6 +38,40 @@ function addIndex(remote, table_name, { index_name, field_names: field_name }) {
     return kv.runT(remote, runnable);
 }
 
+// Given a table name, and a map `{index_name, field_names}`,
+// create a new unique index named `index_name` over `table.field_name`
+//
+// Will fail if the given field name doesn't exist inside the table schema, or
+// if the given index already exists on this table.
+//
+// This function will start a new transaction by default, unless called from inside
+// another transaction (given that the current API doesn't allow nested transaction).
+// In that case, all operations will be executed in the current transaction.
+//
+function addUniqueIndex(remote, table_name, { index_name, field_names: field_name }) {
+    const runnable = tx => {
+        const field_names = utils.arreturn(field_name);
+        return schema.validateSchemaSubset(tx, table_name, field_names).then(r => {
+            if (!r) throw new Error("Can't add unique index on non-existent fields");
+
+            return getUindices(tx, table_name).then(index_table => {
+                const names = index_table.map(st => st.index_name);
+                if (names.includes(index_name)) {
+                    throw new Error(`Can't override unique index ${index_name}`);
+                }
+
+                return setUindex(
+                    tx,
+                    table_name,
+                    index_table.concat({ index_name, field_names })
+                );
+            });
+        });
+    };
+
+    return kv.runT(remote, runnable);
+}
+
 // Given a table name, return a list of maps
 // `{field_name, index_name}` describing the indices of that table.
 //
@@ -51,12 +85,35 @@ function getIndices(remote, table_name) {
     });
 }
 
+// Given a table name, return a list of maps
+// `{field_name, index_name}` describing the unique indices of that table.
+//
+// Will return the empty list if there are no unique indices.
+//
+function getUindices(remote, table_name) {
+    const meta_key = keyEncoding.table(table_name);
+    return kv.get(remote, meta_key).then(meta => {
+        const indices = meta.uindices;
+        return indices === undefined ? [] : indices;
+    });
+}
+
 // setIndex(r, t, idxs) will set the index map list of the table `t` to `idxs`
 function setIndex(remote, table_name, indices) {
     const meta_key = keyEncoding.table(table_name);
     return kv.runT(remote, function(tx) {
         return kv.get(tx, meta_key).then(meta => {
             return kv.put(tx, meta_key, Object.assign(meta, { indices }));
+        });
+    });
+}
+
+// setUindex(r, t, idxs) will set the unique index map list of the table `t` to `idxs`
+function setUindex(remote, table_name, uindices) {
+    const meta_key = keyEncoding.table(table_name);
+    return kv.runT(remote, function(tx) {
+        return kv.get(tx, meta_key).then(meta => {
+            return kv.put(tx, meta_key, Object.assign(meta, { uindices }));
         });
     });
 }
@@ -140,5 +197,6 @@ function isIndex(remote, table_name, idx_name) {
 
 module.exports = {
     addIndex,
+    addUniqueIndex,
     legacy__correlateIndices_T
 };
