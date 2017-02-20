@@ -48,7 +48,7 @@ function addFK_Unsafe(remote, table_name, mapping) {
     });
 
     return check.then(r => {
-        if (!r) throw "Can't add fk on non-existent field";
+        if (!r) throw new Error("Can't add fk on non-existent field");
 
         return getFKs(remote, table_name).then(fk_tuples => {
             return setFK(remote, table_name, fk_tuples.concat(table_mapping));
@@ -62,24 +62,24 @@ function addFK_Unsafe(remote, table_name, mapping) {
 // Will return the empty list if there are no foreign keys.
 //
 function getFKs(remote, table_name) {
-    const meta_key = keyEncoding.encodeTableName(table_name);
-    return kv.get(remote, meta_key).then(values => {
-        const fks = values[0].fks;
+    const meta_key = keyEncoding.table(table_name);
+    return kv.get(remote, meta_key).then(meta => {
+        const fks = meta.fks;
         return fks === undefined ? [] : fks;
     });
 }
 
 // setFK(r, t, fk) will set the fks map list of the table `t` to `fk`
 function setFK(remote, table_name, fks) {
-    const meta_key = keyEncoding.encodeTableName(table_name);
+    const meta_key = keyEncoding.table(table_name);
     return kv.runT(remote, function(tx) {
-        return kv.get(tx, meta_key).then(values => {
-            const meta = values[0];
+        return kv.get(tx, meta_key).then(meta => {
             return kv.put(tx, meta_key, Object.assign(meta, { fks }));
         });
     });
 }
 
+// TODO: Remove if deleted
 // Given a table name and one of its field, return a list of reference tables
 // if that field is a foreign key, or the empty list otherwise.
 function getForeignTable(remote, table_name, fk_field) {
@@ -98,7 +98,7 @@ function isFK(remote, table_name, field) {
     return getFKs(remote, table_name, field).then(r => r.length !== 0);
 }
 
-// See correlateIndices_T for details.
+// See correlateFKs_Unsafe for details.
 //
 // This function will start a new transaction by default, unless called from inside
 // another transaction (given that the current API doesn't allow nested transaction).
@@ -130,6 +130,5 @@ function correlateFKs_Unsafe(remote, table_name, field_name) {
 module.exports = {
     isFK,
     addFK_T,
-    getForeignTable,
     correlateFKs_T
 };

@@ -14,16 +14,16 @@ const keyEncoding = require('./../../db/keyEncoding');
 // another transaction (given that the current API doesn't allow nested transaction).
 // In that case, all operations will be executed in the current transaction.
 //
-function addIndex_T(remote, table_name, { index_name, field_names: field_name }) {
+function addIndex(remote, table_name, { index_name, field_names: field_name }) {
     const runnable = tx => {
         const field_names = utils.arreturn(field_name);
-        return schema.validateSchemaSubset(remote, table_name, field_names).then(r => {
-            if (!r) throw "Can't add index on non-existent fields";
+        return schema.validateSchemaSubset(tx, table_name, field_names).then(r => {
+            if (!r) throw new Error("Can't add index on non-existent fields");
 
             return getIndices(tx, table_name).then(index_table => {
                 const names = index_table.map(st => st.index_name);
                 if (names.includes(index_name)) {
-                    throw `Can't override index ${index_name}`;
+                    throw new Error(`Can't override index ${index_name}`);
                 }
 
                 return setIndex(
@@ -44,79 +44,21 @@ function addIndex_T(remote, table_name, { index_name, field_names: field_name })
 // Will return the empty list if there are no indices.
 //
 function getIndices(remote, table_name) {
-    const meta_key = keyEncoding.encodeTableName(table_name);
-    return kv.get(remote, meta_key).then(values => {
-        const indices = values[0].indices;
+    const meta_key = keyEncoding.table(table_name);
+    return kv.get(remote, meta_key).then(meta => {
+        const indices = meta.indices;
         return indices === undefined ? [] : indices;
     });
 }
 
 // setIndex(r, t, idxs) will set the index map list of the table `t` to `idxs`
 function setIndex(remote, table_name, indices) {
-    const meta_key = keyEncoding.encodeTableName(table_name);
+    const meta_key = keyEncoding.table(table_name);
     return kv.runT(remote, function(tx) {
-        return kv.get(tx, meta_key).then(values => {
-            const meta = values[0];
+        return kv.get(tx, meta_key).then(meta => {
             return kv.put(tx, meta_key, Object.assign(meta, { indices }));
         });
     });
-}
-
-// Given an index name, and the table it references, perform
-// a fetch-and-add on its key counter reference, and return the new value.
-//
-// This function will start a new transaction by default, unless called from inside
-// another transaction (given that the current API doesn't allow nested transaction).
-// In that case, all operations will be executed in the current transaction.
-//
-// Will start a new transaction by default.
-//
-function fetchAddIndexKey_T(remote, table_name, index_name) {
-    return kv.runT(remote, function(tx) {
-        return incrIndexKey(tx, table_name, index_name).then(_ct => {
-            return getIndexKey_T(tx, table_name, index_name);
-        });
-    });
-}
-
-// Atomically increment the index key counter value.
-function incrIndexKey(remote, table_name, index_name) {
-    const ref = generateIndexRef(remote, table_name, index_name);
-    return remote.update(ref.increment(1));
-}
-
-// See getIndexKey_Unsafe for details.
-//
-// This function will start a new transaction by default, unless called from inside
-// another transaction (given that the current API doesn't allow nested transaction).
-// In that case, all operations will be executed in the current transaction.
-//
-function getIndexKey_T(remote, table_name, index_name) {
-    return kv.runT(remote, function(tx) {
-        return getIndexKey_Unsafe(tx, table_name, index_name);
-    });
-}
-
-// Given an index name, and the table it references, return
-// the current index key counter value.
-//
-// Will fail if the given index name doesn't reference the given table.
-//
-// This function is unsafe. It MUST be ran inside a transaction.
-//
-function getIndexKey_Unsafe(remote, table_name, index_name) {
-    return isIndex(remote, table_name, index_name).then(r => {
-        if (!r) throw `${index_name} doesn't reference a field in ${table_name}`;
-
-        const ref = generateIndexRef(remote, table_name, index_name);
-        return ref.read();
-    });
-}
-
-// Given an index name, and the table it references, return
-// a reference to the index key counter.
-function generateIndexRef(remote, table_name, index_name) {
-    return remote.counter(keyEncoding.encodeIndex(table_name, index_name));
 }
 
 // Given a table name and one of its fields, return a list of indexes,
@@ -147,13 +89,13 @@ function fieldsOfIndex(remote, table_name, index_name) {
     });
 }
 
-// See correlateIndices_T for details.
+// See correlateIndices_Unsafe for details.
 //
 // This function will start a new transaction by default, unless called from inside
 // another transaction (given that the current API doesn't allow nested transaction).
 // In that case, all operations will be executed in the current transaction.
 //
-function correlateIndices_T(remote, table_name, field_names) {
+function legacy__correlateIndices_T(remote, table_name, field_names) {
     return kv.runT(remote, function(tx) {
         return correlateIndices_Unsafe(tx, table_name, field_names);
     });
@@ -200,8 +142,6 @@ module.exports = {
     isIndex,
     fieldsOfIndex,
     indexOfField,
-    addIndex_T,
-    getIndexKey_T,
-    fetchAddIndexKey_T,
-    correlateIndices_T
+    addIndex,
+    legacy__correlateIndices_T
 };

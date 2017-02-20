@@ -13,7 +13,7 @@ function flatten(arr) {
     );
 }
 
-// Remove duplicates off an array
+// Remove duplicates from an array
 function squash(arr) {
     return [...new Set(arr)];
 }

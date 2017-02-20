@@ -8,12 +8,11 @@ const keyEncoding = require('./../../db/keyEncoding');
 // a primary key set).
 //
 function getPKField(remote, table_name) {
-    const meta_key = keyEncoding.encodeTableName(table_name);
-    return kv.get(remote, meta_key).then(values => {
-        const meta = values[0];
+    const meta_key = keyEncoding.table(table_name);
+    return kv.get(remote, meta_key).then(meta => {
         const pk_field = meta.primary_key_field;
         if (pk_field === undefined) {
-            throw `Fatal: ${table_name} doesn't have a primary key`;
+            throw new Error(`Fatal: ${table_name} doesn't have a primary key`);
         }
 
         return pk_field;
@@ -36,16 +35,15 @@ function fetchAddPrimaryKey_T(remote, table_name) {
 }
 
 function getCurrentKey(remote, table_name) {
-    const meta_key = keyEncoding.encodeTableName(table_name);
-    return kv.get(remote, meta_key).then(values => values[0].current_pk_value);
+    const meta_key = keyEncoding.table(table_name);
+    return kv.get(remote, meta_key).then(meta => meta.current_pk_value);
 }
 
 // Atomically increment the primary key counter value.
 function incrKey(remote, table_name) {
-    const meta_key = keyEncoding.encodeTableName(table_name);
+    const meta_key = keyEncoding.table(table_name);
     return kv.runT(remote, function(tx) {
-        return kv.get(tx, meta_key).then(values => {
-            const meta = values[0];
+        return kv.get(tx, meta_key).then(meta => {
             const pk_value = meta.current_pk_value;
             return kv.put(
                 tx,

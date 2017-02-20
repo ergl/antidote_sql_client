@@ -3,6 +3,8 @@
     "version": "0.1.0",
     "description": "An implementation of the Rubis benchmark for Antidote",
     "dependencies": {
-        "antidote_ts_client" : "0.1.0"
+        "antidote_ts_client": "0.1.5",
+        "bs-platform": "1.4.2",
+        "kset": "0.2.0"
     }
 }

@@ -62,28 +62,29 @@ function insertInto_Unsafe(remote, table, mapping) {
             // Easily solvable by inserting a bottom value.
             // TODO: Add bottom value for nullable fields
             return _schema.validateSchema(remote, table, schema).then(r => {
-                if (!r) throw 'Invalid schema';
+                if (!r) throw new Error('Invalid schema');
 
                 return swapFKReferences_Unsafe(remote, table, mapping);
             });
         })
         .then(({ valid, result }) => {
-            if (!valid) throw 'FK constraint failed';
+            if (!valid) throw new Error('FK constraint failed');
             const f_pk_value = pks.fetchAddPrimaryKey_T(remote, table);
             return f_pk_value.then(pk_value => ({ pk_value, result }));
         })
         .then(({ pk_value, result }) => {
             const field_names = Object.keys(result);
-            const pk_key = keyEncoding.encodePrimary(table, pk_value);
-            const field_keys = field_names.map(f =>
-                keyEncoding.encodeField(table, pk_value, f));
+            const pk_key = keyEncoding.spk(table, keyEncoding.d_int(pk_value));
+            const field_keys = field_names.map(f => {
+                return keyEncoding.field(table, keyEncoding.d_int(pk_value), f);
+            });
             const field_values = field_names.map(f => mapping[f]);
 
             const keys = field_keys.concat(pk_key);
             const values = field_values.concat(pk_value);
 
             return kv.put(remote, keys, values).then(_ => {
-                return updateIndices(remote, table, pk_key, mapping);
+                return updateIndices(remote, table, pk_value, mapping);
             });
         });
 }
@@ -128,10 +129,10 @@ function swapFKReferences_Unsafe(remote, table, mapping) {
                 });
 
             return valid.then(v => {
-                if (!v) throw 'FK constraint failed';
+                if (!v) throw new Error('FK constraint failed');
                 return {
                     k: field_name,
-                    v: keyEncoding.encodePrimary(table, mapping[field_name])
+                    v: keyEncoding.spk(table, keyEncoding.d_int(mapping[field_name]))
                 };
             });
         });
@@ -159,20 +160,20 @@ function swapFKReferences_Unsafe(remote, table, mapping) {
     });
 }
 
-function updateIndices(remote, table, fk, mapping) {
+function updateIndices(remote, table, fk_value, mapping) {
     const field_names = Object.keys(mapping);
-    const correlated = indices.correlateIndices_T(remote, table, field_names);
+    const correlated = indices.legacy__correlateIndices_T(remote, table, field_names);
 
     return correlated.then(relation => {
         const ops = relation.reduce(
             (acc, { index_name, field_names }) => {
                 // FIXME: field f might not be in the mapping
                 const field_values = field_names.map(f => mapping[f]);
-                const pr = updateSingleIndex_Unsafe(
+                const pr = updateSingleIndex(
                     remote,
                     table,
                     index_name,
-                    fk,
+                    fk_value,
                     field_names,
                     field_values
                 );
@@ -193,18 +194,26 @@ function updateIndices(remote, table, fk, mapping) {
     });
 }
 
-function updateSingleIndex_Unsafe(remote, table, index, fk, field_names, field_values) {
-    return indices.fetchAddIndexKey_T(remote, table, index).then(fresh_key => {
-        const pk = keyEncoding.encodeIndexPrimary(table, index, fresh_key);
-        const field_keys = field_names.map(f =>
-            keyEncoding.encodeIndexField(table, index, fresh_key, f));
-
-        // Make the index pk key point to the pk of the indexed table
-        const keys = field_keys.concat(pk);
-        const values = field_values.concat(fk);
-
-        return { keys, values };
+// FIXME: Generate super keys
+// When adding to the kset, we should auto-insert the appropiate super keys to support
+// subkey range scans. (Or maybe `subkeys` should be smarter thant that and derive the
+// appropiate scan.
+function updateSingleIndex(_, table, index, fk_value, field_names, field_values) {
+    const index_keys = field_names.map((fld_name, i) => {
+        return keyEncoding.index_key(
+            table,
+            index,
+            fld_name,
+            keyEncoding.d_string(field_values[i]),
+            keyEncoding.d_int(fk_value)
+        );
     });
+
+    // TODO: Don't put these keys
+    // Just sentinel keys, should add them to the kset instead
+    const index_values = field_names.map(_ => undefined);
+
+    return { keys: index_keys, values: index_values };
 }
 
 // See select_Unsafe for details.
@@ -253,7 +262,7 @@ function select_Unsafe(remote, table, field, pk_value) {
     }
 
     return _schema.validateSchemaSubset(remote, table, fields).then(r => {
-        if (!r) throw 'Invalid schema';
+        if (!r) throw new Error('Invalid schema');
         return perform_scan(fields);
     });
 }
@@ -268,41 +277,6 @@ function scan_T(remote, table, range) {
     return kv.runT(remote, function(tx) {
         return scan_Unsafe(tx, table, range);
     });
-}
-
-function scanIndex_T(remote, table, index_name, range) {
-    return kv.runT(remote, function(tx) {
-        return scanIndex_Unsafe(tx, table, index_name, range);
-    });
-}
-
-function scanIndex_Unsafe(remote, table, index_name, range) {
-    // Assumes keys are numeric
-    const f_cutoff = indices.getIndexKey_T(remote, table, index_name).then(m => {
-        return range.find(e => e > m);
-    });
-
-    return f_cutoff
-        .then(cutoff => {
-            if (cutoff !== undefined)
-                throw `Error: scan key ${cutoff} out of valid range`;
-            return indices.fieldsOfIndex(remote, table, index_name);
-        })
-        .then(indexed_fields_names => {
-            // For every k in key range, encode k
-            const keys = utils.flatten(
-                range.map(k => {
-                    return indexed_fields_names.map(f => {
-                        // FIXME: Right now we're getting only the value, at this key
-                        // The key encodeIndexPrimary(table, index_name, k) points to the
-                        // pk key of those fields. Follow that if we need a join
-                        return keyEncoding.encodeIndexField(table, index_name, k, f);
-                    });
-                })
-            );
-
-            return kv.get(remote, keys);
-        });
 }
 
 // Given a table name, and a list of primary keys, will recursively
@@ -322,13 +296,17 @@ function scan_Unsafe(remote, table, range) {
 
     return f_cutoff
         .then(cutoff => {
-            if (cutoff !== undefined)
-                throw `Error: scan key ${cutoff} out of valid range`;
+            if (cutoff !== undefined) {
+                throw new Error(
+                    `scan of key ${cutoff} on ${table} is out of valid range`
+                );
+            }
+
             return _schema.getSchema(remote, table);
         })
         .then(schema => {
             // For every k in key range, encode k
-            const keys = range.map(k => keyEncoding.encodePrimary(table, k));
+            const keys = range.map(k => keyEncoding.spk(table, keyEncoding.d_int(k)));
 
             // Get the primary key field.
             const f_pk_field = pks.getPKField(remote, table);
@@ -343,8 +321,9 @@ function scan_Unsafe(remote, table, range) {
                 return Promise.all([f_pk_field, f_non_pk_fields]).then((
                     [pk_field, fields]
                 ) => {
-                    const field_keys = fields.map(f =>
-                        keyEncoding.encodeField(table, range[idx], f));
+                    const field_keys = fields.map(f => {
+                        return keyEncoding.field(table, keyEncoding.d_int(range[idx]), f);
+                    });
                     // After encoding all fields, we append the pk key/field to the range we want to scan
                     return scanRow(
                         remote,
@@ -377,6 +356,5 @@ module.exports = {
     create,
     scan_T,
     select_T,
-    insertInto_T,
-    scanIndex_T
+    insertInto_T
 };
