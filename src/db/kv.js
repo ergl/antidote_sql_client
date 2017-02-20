@@ -114,7 +114,10 @@ function get({ remote }, key) {
     const readable_keys = keys.map(({ key }) => keyEncoding.toString(key));
 
     const refs = readable_keys.map(k => generateRef(remote, k));
-    return remote.readBatch(refs);
+    return remote.readBatch(refs).then(values => {
+        if (Array.isArray(values) && values.length === 1) return values[0];
+        return values;
+    });
 }
 
 function generateRef(remote, key) {
