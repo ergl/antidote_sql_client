@@ -45,8 +45,8 @@ function addIndex(remote, table_name, { index_name, field_names: field_name }) {
 //
 function getIndices(remote, table_name) {
     const meta_key = keyEncoding.table(table_name);
-    return kv.get(remote, meta_key).then(values => {
-        const indices = values[0].indices;
+    return kv.get(remote, meta_key).then(meta => {
+        const indices = meta.indices;
         return indices === undefined ? [] : indices;
     });
 }
@@ -55,8 +55,7 @@ function getIndices(remote, table_name) {
 function setIndex(remote, table_name, indices) {
     const meta_key = keyEncoding.table(table_name);
     return kv.runT(remote, function(tx) {
-        return kv.get(tx, meta_key).then(values => {
-            const meta = values[0];
+        return kv.get(tx, meta_key).then(meta => {
             return kv.put(tx, meta_key, Object.assign(meta, { indices }));
         });
     });
