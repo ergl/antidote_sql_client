@@ -187,14 +187,6 @@ function correlateIndices_Unsafe(remote, table_name, field_name) {
     });
 }
 
-// Given a table and an index name, checks if
-// the index references a field in that table.
-function isIndex(remote, table_name, idx_name) {
-    return getIndices(remote, table_name).then(indices => {
-        return indices.map(idx => idx.index_name).includes(idx_name);
-    });
-}
-
 module.exports = {
     addIndex,
     addUniqueIndex,
