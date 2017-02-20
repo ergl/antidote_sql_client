@@ -114,10 +114,30 @@ function get({ remote }, key) {
     const readable_keys = keys.map(({ key }) => keyEncoding.toString(key));
 
     const refs = readable_keys.map(k => generateRef(remote, k));
-    return remote.readBatch(refs).then(values => {
-        if (Array.isArray(values) && values.length === 1) return values[0];
-        return values;
+    return remote.readBatch(refs).then(read_values => {
+        const { valid, values } = invalidValues(readable_keys, read_values);
+        if (!valid) {
+            throw new Error(`Empty get on key: ${values}`);
+        }
+
+        if (read_values.length === 1) {
+            return read_values[0];
+        }
+
+        return read_values;
     });
+}
+
+function invalidValues(keys, values) {
+    const invalid = values.reduce(
+        (acc, v, ix) => {
+            return v === null ? acc.concat(keys[ix]) : acc;
+        },
+        []
+    );
+
+    const all_valid = invalid.length === 0;
+    return { valid: all_valid, values: invalid };
 }
 
 function generateRef(remote, key) {
