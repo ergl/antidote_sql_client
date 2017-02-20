@@ -162,7 +162,7 @@ function swapFKReferences_Unsafe(remote, table, mapping) {
 
 function updateIndices(remote, table, fk_value, mapping) {
     const field_names = Object.keys(mapping);
-    const correlated = indices.legacy__correlateIndices_T(remote, table, field_names);
+    const correlated = indices.correlateIndices(remote, table, field_names);
 
     return correlated.then(relation => {
         const ops = relation.reduce(

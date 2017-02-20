@@ -152,7 +152,7 @@ function fieldsOfIndex(remote, table_name, index_name) {
 // another transaction (given that the current API doesn't allow nested transaction).
 // In that case, all operations will be executed in the current transaction.
 //
-function legacy__correlateIndices_T(remote, table_name, field_names) {
+function correlateIndices(remote, table_name, field_names) {
     return kv.runT(remote, function(tx) {
         return correlateIndices_Unsafe(tx, table_name, field_names);
     });
@@ -190,5 +190,5 @@ function correlateIndices_Unsafe(remote, table_name, field_name) {
 module.exports = {
     addIndex,
     addUniqueIndex,
-    legacy__correlateIndices_T
+    correlateIndices
 };
