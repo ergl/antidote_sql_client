@@ -112,7 +112,7 @@ function condPut(remote, key, value, expected) {
     });
 }
 
-function get({ remote }, key) {
+function get({ remote }, key, { unsafe } = { unsafe: false }) {
     if (!isTxHandle(remote)) throw new Error('Calling get outside a transaction');
 
     const keys = utils.arreturn(key);
@@ -120,6 +120,8 @@ function get({ remote }, key) {
 
     const refs = readable_keys.map(k => generateRef(remote, k));
     return remote.readBatch(refs).then(read_values => {
+        if (unsafe) return read_values;
+
         const { valid, values } = invalidValues(readable_keys, read_values);
         if (!valid) {
             throw new Error(`Empty get on key: ${values}`);
