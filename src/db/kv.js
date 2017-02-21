@@ -121,6 +121,10 @@ function get({ remote }, key, { unsafe } = { unsafe: false }) {
     if (!isTxHandle(remote)) throw new Error('Calling get outside a transaction');
 
     const keys = utils.arreturn(key);
+    if (keys.length === 0) {
+        return Promise.resolve([]);
+    }
+
     const readable_keys = keys.map(({ key }) => keyEncoding.toString(key));
 
     const refs = readable_keys.map(k => generateRef(remote, k));
