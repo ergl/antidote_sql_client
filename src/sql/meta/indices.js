@@ -135,8 +135,36 @@ function indexOfField(remote, table_name, indexed_field) {
     });
 }
 
+// Given a table name and one of its fields, return a list of indexes,
+// or the empty list if no indices are found.
+function uindexOfField(remote, table_name, indexed_field) {
+    return getUindices(remote, table_name).then(indices => {
+        // Same as filter(f => f.field_name === indexed_field).map(f => f.index_name)
+        const match_index = (acc, { index_name, field_names }) => {
+            if (field_names.includes(indexed_field)) {
+                return acc.concat(index_name);
+            }
+
+            return acc;
+        };
+
+        return indices.reduce(match_index, []);
+    });
+}
+
 function fieldsOfIndex(remote, table_name, index_name) {
     return getIndices(remote, table_name).then(indices => {
+        const matching = indices.filter(idx_t => {
+            const name = idx_t.index_name;
+            return name === index_name;
+        });
+
+        return utils.flatten(matching.map(({ field_names }) => field_names));
+    });
+}
+
+function fieldsOfUindex(remote, table_name, index_name) {
+    return getUindices(remote, table_name).then(indices => {
         const matching = indices.filter(idx_t => {
             const name = idx_t.index_name;
             return name === index_name;
@@ -187,8 +215,50 @@ function correlateIndices_Unsafe(remote, table_name, field_name) {
     });
 }
 
+// See correlateUindices_Unsafe for details.
+//
+// This function will start a new transaction by default, unless called from inside
+// another transaction (given that the current API doesn't allow nested transaction).
+// In that case, all operations will be executed in the current transaction.
+//
+function correlateUniqueIndices(remote, table_name, field_names) {
+    return kv.runT(remote, function(tx) {
+        return correlateUindices_Unsafe(tx, table_name, field_names);
+    });
+}
+
+// Given a table name, and a list of field names, return a list of the unique
+// indices on any of the fields, in the form [ {index_name, field_names} ].
+//
+// Whereas `uindexOfField` only returns the index name, this function will also return
+// all the fields of the index.
+//
+// This function is unsafe. It MUST be ran inside a transaction.
+//
+function correlateUindices_Unsafe(remote, table_name, field_name) {
+    const field_names = utils.arreturn(field_name);
+
+    const promises = field_names.map(f => uindexOfField(remote, table_name, f));
+    return Promise.all(promises).then(results => {
+        // Flatten and remove duplicates
+        const indices = utils.squash(utils.flatten(results));
+        const correlate = (index_name, field_names) => {
+            return { index_name: index_name, field_names };
+        };
+
+        const promises = indices.map(index => {
+            return fieldsOfUindex(remote, table_name, index).then(fields => {
+                return correlate(index, fields);
+            });
+        });
+
+        return Promise.all(promises);
+    });
+}
+
 module.exports = {
     addIndex,
     addUniqueIndex,
-    correlateIndices
+    correlateIndices,
+    correlateUniqueIndices
 };
