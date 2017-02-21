@@ -92,17 +92,16 @@ function put({ remote, kset }, key, value) {
     });
 }
 
-// condPut(_, k, v, e) will succeed iff get(_, k) = e
+// condPut(_, k, v, e) will succeed iff get(_, k) = e | get(_, k) = ⊥
 function condPut(remote, key, value, expected) {
     return runT(remote, function(tx) {
-        return get(tx, key).then(vs => {
+        return get(tx, key, { unsafe: true }).then(vs => {
             const exp = utils.arreturn(expected);
-
             if (exp.length !== vs.length) {
-                throw new Error(`ConditionalPut failed, expected ${expected}, got ${vs}`);
+                throw new Error(`Condional put failed, expected ${expected}, got ${vs}`);
             }
 
-            const equals = exp.every((elt, idx) => elt === vs[idx]);
+            const equals = cond_match(vs, exp);
             if (!equals) {
                 throw new Error(`Condional put failed, expected ${expected}, got ${vs}`);
             }
@@ -110,6 +109,12 @@ function condPut(remote, key, value, expected) {
             return put(tx, key, value);
         });
     });
+}
+
+function cond_match(got, expected) {
+    const empty = got.every(g => g === null);
+    const match = expected.every((elt, ix) => elt === got[ix]);
+    return empty || match;
 }
 
 function get({ remote }, key, { unsafe } = { unsafe: false }) {
