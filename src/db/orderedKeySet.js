@@ -36,29 +36,83 @@ function unwrap_js_t_list(ml_js_t) {
     return ml_to_list(ml_js_t);
 }
 
-function wrap_find(x, t) {
-    return unwrap_js_t_list(kset.find(x, t));
+function wrap_add({ key }, t) {
+    return kset.add(key, t);
 }
 
-function wrap_subkeys(ini, t) {
-    return unwrap_js_t_list(kset.subkeys(ini, t));
+function wrap_find({ key }, t) {
+    return kset.find(key, t);
+}
+
+function wrap_next({ key }, t) {
+    return kset.next_key(key, t);
+}
+
+function wrap_prev({ key }, t) {
+    return kset.prev_key(key, t);
+}
+
+function wrap_subkeys({ key }, t) {
+    return unwrap_js_t_list(kset.subkeys(key, t));
 }
 
 function wrap_batch(ini, fin) {
-    return unwrap_js_t_list(kset.batch(ini, fin));
+    return unwrap_js_t_list(kset.batch(ini.key, fin.key));
 }
 
 function wrap_contents(t) {
     return unwrap_js_t_list(kset.contents(t)).map(kset.repr);
 }
 
+function raw_contents(t) {
+    return unwrap_js_t_list(kset.contents(t));
+}
+
+function serialize(t) {
+    return raw_contents(t).map(serializeKey);
+}
+
+function serializeKey(key) {
+    return Object.keys(key).reduce(
+        (acc, curr) => {
+            const ns = key[curr];
+            const nested = Array.isArray(ns) ? [serializeKey(ns)] : ns;
+            return Object.assign(acc, {
+                [curr]: nested
+            });
+        },
+        {}
+    );
+}
+
+function deserialize(ser) {
+    let empt = kset.empty();
+    ser.forEach(serkey => {
+        kset.add(deserializeKey(serkey), empt);
+    });
+    return empt;
+}
+
+function deserializeKey(key) {
+    return Object.keys(key).reduce(
+        (acc, curr) => {
+            const ns = key[curr];
+            acc[curr] = Array.isArray(ns) ? deserializeKey(ns[0]) : ns;
+            return acc;
+        },
+        []
+    );
+}
+
 module.exports = {
-    empty: kset.empty,
-    add: kset.add,
+    empty: () => kset.empty(),
+    add: wrap_add,
     find: wrap_find,
-    next_key: kset.next_key,
-    prev_key: kset.prev_key,
+    next_key: wrap_next,
+    prev_key: wrap_prev,
     subkeys: wrap_subkeys,
     batch: wrap_batch,
-    contents: wrap_contents
+    contents: wrap_contents,
+    serialize,
+    deserialize
 };
