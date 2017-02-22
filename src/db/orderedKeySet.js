@@ -64,6 +64,46 @@ function wrap_contents(t) {
     return unwrap_js_t_list(kset.contents(t)).map(kset.repr);
 }
 
+function raw_contents(t) {
+    return unwrap_js_t_list(kset.contents(t));
+}
+
+function serialize(t) {
+    return raw_contents(t).map(serializeKey);
+}
+
+function serializeKey(key) {
+    return Object.keys(key).reduce(
+        (acc, curr) => {
+            const ns = key[curr];
+            const nested = Array.isArray(ns) ? [serializeKey(ns)] : ns;
+            return Object.assign(acc, {
+                [curr]: nested
+            });
+        },
+        {}
+    );
+}
+
+function deserialize(ser) {
+    let empt = kset.empty();
+    ser.forEach(serkey => {
+        kset.add(deserializeKey(serkey), empt);
+    });
+    return empt;
+}
+
+function deserializeKey(key) {
+    return Object.keys(key).reduce(
+        (acc, curr) => {
+            const ns = key[curr];
+            acc[curr] = Array.isArray(ns) ? deserializeKey(ns[0]) : ns;
+            return acc;
+        },
+        []
+    );
+}
+
 module.exports = {
     empty: () => kset.empty(),
     add: wrap_add,
@@ -72,5 +112,7 @@ module.exports = {
     prev_key: wrap_prev,
     subkeys: wrap_subkeys,
     batch: wrap_batch,
-    contents: wrap_contents
+    contents: wrap_contents,
+    serialize,
+    deserialize
 };
