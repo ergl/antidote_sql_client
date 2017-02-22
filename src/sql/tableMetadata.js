@@ -6,6 +6,7 @@ function createMeta(remote, table_name, pk_field, schema) {
     const meta_content = {
         fks: [],
         indices: [],
+        uindices: [],
         schema: schema,
         current_pk_value: 0,
         primary_key_field: pk_field

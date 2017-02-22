@@ -92,17 +92,16 @@ function put({ remote, kset }, key, value) {
     });
 }
 
-// condPut(_, k, v, e) will succeed iff get(_, k) = e
+// condPut(_, k, v, e) will succeed iff get(_, k) = e | get(_, k) = ⊥
 function condPut(remote, key, value, expected) {
     return runT(remote, function(tx) {
-        return get(tx, key).then(vs => {
+        return get(tx, key, { unsafe: true }).then(vs => {
             const exp = utils.arreturn(expected);
-
             if (exp.length !== vs.length) {
-                throw new Error(`ConditionalPut failed, expected ${expected}, got ${vs}`);
+                throw new Error(`Condional put failed, expected ${expected}, got ${vs}`);
             }
 
-            const equals = exp.every((elt, idx) => elt === vs[idx]);
+            const equals = cond_match(vs, exp);
             if (!equals) {
                 throw new Error(`Condional put failed, expected ${expected}, got ${vs}`);
             }
@@ -112,14 +111,26 @@ function condPut(remote, key, value, expected) {
     });
 }
 
-function get({ remote }, key) {
+function cond_match(got, expected) {
+    const empty = got.every(g => g === null);
+    const match = expected.every((elt, ix) => elt === got[ix]);
+    return empty || match;
+}
+
+function get({ remote }, key, { unsafe } = { unsafe: false }) {
     if (!isTxHandle(remote)) throw new Error('Calling get outside a transaction');
 
     const keys = utils.arreturn(key);
+    if (keys.length === 0) {
+        return Promise.resolve([]);
+    }
+
     const readable_keys = keys.map(({ key }) => keyEncoding.toString(key));
 
     const refs = readable_keys.map(k => generateRef(remote, k));
     return remote.readBatch(refs).then(read_values => {
+        if (unsafe) return read_values;
+
         const { valid, values } = invalidValues(readable_keys, read_values);
         if (!valid) {
             throw new Error(`Empty get on key: ${values}`);
