@@ -82,7 +82,7 @@ function put({ remote, kset }, key, value) {
     const ops = refs.map((r, i) => r.set(values[i]));
     // If put is successful, add the keys to the kset
     return remote.update(ops).then(ct => {
-        keys.forEach(({ key }) => orderedKeySet.add(key, kset));
+        keys.forEach(key => orderedKeySet.add(key, kset));
         return ct;
     });
 }
