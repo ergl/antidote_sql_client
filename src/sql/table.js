@@ -229,7 +229,12 @@ function updateUIndices(remote, table, fk_value, mapping) {
         );
 
         return ops.then(({ keys, values, expected }) => {
-            return kv.condPut(remote, keys, values, expected);
+            // TODO: Tag the error
+            // guarantee that the returned error is an uniqueness violation
+            return kv.condPut(remote, keys, values, expected).catch(e => {
+                console.log(e);
+                throw new Error(`Uniqueness guarantee violation on ${table}`);
+            });
         });
     });
 }
