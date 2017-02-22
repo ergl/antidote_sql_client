@@ -275,7 +275,6 @@ function updateSingleUIndex(_, table, index, fk_value, field_names, field_values
         );
     });
 
-    // TODO: Perform a conditional put with these
     const uindex_values = field_names.map(_ => fk_value);
     return { keys: uindex_keys, values: uindex_values };
 }
