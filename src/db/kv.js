@@ -37,7 +37,7 @@ function read_set(remote) {
     const set_key = keyEncoding.set_key();
     const ref = generateRef(remote, set_key);
     return ref.read().then(v => {
-        return v === null ? orderedKeySet.empty : v;
+        return v === null ? orderedKeySet.empty() : v;
     });
 }
 
