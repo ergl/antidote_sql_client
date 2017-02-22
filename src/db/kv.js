@@ -37,14 +37,19 @@ function read_set(remote) {
     const set_key = keyEncoding.set_key();
     const ref = generateRef(remote, set_key);
     return ref.read().then(v => {
-        return v === null ? orderedKeySet.empty() : v;
+        if (v === null) {
+            return orderedKeySet.empty();
+        }
+
+        return orderedKeySet.deserialize(v);
     });
 }
 
 function write_set({ remote, kset }) {
     const set_key = keyEncoding.set_key();
     const ref = generateRef(remote, set_key);
-    return remote.update(ref.set(kset));
+    const ser = orderedKeySet.serialize(kset);
+    return remote.update(ref.set(ser));
 }
 
 function runT(remote, fn) {
