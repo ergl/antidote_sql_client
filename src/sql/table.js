@@ -229,7 +229,7 @@ function updateUIndices(remote, table, fk_value, mapping) {
         );
 
         return ops.then(({ keys, values, expected }) => {
-            // TODO: Tag the error
+            // TODO: Tag condPut error
             // guarantee that the returned error is an uniqueness violation
             return kv.condPut(remote, keys, values, expected).catch(e => {
                 console.log(e);
@@ -254,7 +254,7 @@ function updateSingleIndex(_, table, index, fk_value, field_names, field_values)
         );
     });
 
-    // TODO: Don't put these keys
+    // TODO: If bottom value is defined, use it for these keys
     // Just sentinel keys, should add them to the kset instead
     const index_values = field_names.map(_ => undefined);
 
