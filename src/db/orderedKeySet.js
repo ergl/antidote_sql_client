@@ -36,16 +36,28 @@ function unwrap_js_t_list(ml_js_t) {
     return ml_to_list(ml_js_t);
 }
 
-function wrap_find(x, t) {
-    return unwrap_js_t_list(kset.find(x, t));
+function wrap_add({ key }, t) {
+    return kset.add(key, t);
 }
 
-function wrap_subkeys(ini, t) {
-    return unwrap_js_t_list(kset.subkeys(ini, t));
+function wrap_find({ key }, t) {
+    return kset.find(key, t);
+}
+
+function wrap_next({ key }, t) {
+    return kset.next_key(key, t);
+}
+
+function wrap_prev({ key }, t) {
+    return kset.prev_key(key, t);
+}
+
+function wrap_subkeys({ key }, t) {
+    return unwrap_js_t_list(kset.subkeys(key, t));
 }
 
 function wrap_batch(ini, fin) {
-    return unwrap_js_t_list(kset.batch(ini, fin));
+    return unwrap_js_t_list(kset.batch(ini.key, fin.key));
 }
 
 function wrap_contents(t) {
@@ -54,10 +66,10 @@ function wrap_contents(t) {
 
 module.exports = {
     empty: kset.empty,
-    add: kset.add,
+    add: wrap_add,
     find: wrap_find,
-    next_key: kset.next_key,
-    prev_key: kset.prev_key,
+    next_key: wrap_next,
+    prev_key: wrap_prev,
     subkeys: wrap_subkeys,
     batch: wrap_batch,
     contents: wrap_contents
