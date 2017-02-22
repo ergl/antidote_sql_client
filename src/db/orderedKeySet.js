@@ -65,7 +65,7 @@ function wrap_contents(t) {
 }
 
 module.exports = {
-    empty: kset.empty,
+    empty: () => kset.empty(),
     add: wrap_add,
     find: wrap_find,
     next_key: wrap_next,
