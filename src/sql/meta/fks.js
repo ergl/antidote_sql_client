@@ -79,19 +79,6 @@ function setFK(remote, table_name, fks) {
     });
 }
 
-// TODO: Remove if deleted
-// Given a table name and one of its field, return a list of reference tables
-// if that field is a foreign key, or the empty list otherwise.
-function getForeignTable(remote, table_name, fk_field) {
-    return getFKs(remote, table_name).then(fk_tuples => {
-        const match_fk = ({ field_name }) => {
-            return field_name === fk_field;
-        };
-
-        return fk_tuples.filter(match_fk).map(({ reference_table }) => reference_table);
-    });
-}
-
 // Given a table and one of its fields, check if that
 // field is a foreign key.
 function isFK(remote, table_name, field) {
