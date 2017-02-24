@@ -11,6 +11,7 @@ const keyEncoding = require('../db/keyEncoding');
 const tableMetadata = require('./tableMetadata');
 
 // TODO: Support user-defined primary keys (and non-numeric)
+// If allowed, should create an unique index on it
 // TODO: Allow null values into the database by omitting fields
 function create(remote, name, schema) {
     // Pick the head of the schema as an autoincremented primary key
@@ -41,6 +42,9 @@ function insertInto_T(remote, name, mapping) {
 //
 // This function is unsafe. It MUST be ran inside a transaction.
 //
+// FIXME: Foreign keys are being inserted in {key: Kset.key}
+// Store them as strings, or as Kset.key and `toString` them
+// before showing them to the user (with `select`)
 function insertInto_Unsafe(remote, table, mapping) {
     // 1 - Check schema is correct. If it's not, throw
     // 2 - Get new pk value by reading the meta keyrange (incrAndGet)
