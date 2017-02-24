@@ -1,7 +1,13 @@
 {
-    "name": "rubis_antidote",
+    "name": "antidote_sql_client",
     "version": "0.1.0",
-    "description": "An implementation of the Rubis benchmark for Antidote",
+    "description": "An experimental SQL interface for Antidote",
+    "homepage": "https://github.com/ergl/antidote_sql_client",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/ergl/antidote_sql_client.git"
+    },
+    "main": "./src/antidoteSQL.js",
     "dependencies": {
         "antidote_ts_client": "0.1.5",
         "bs-platform": "1.4.2",
