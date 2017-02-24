@@ -72,6 +72,10 @@ function serialize(t) {
     return raw_contents(t).map(serializeKey);
 }
 
+function wrap_serialize_key({ key }) {
+    return serializeKey(key);
+}
+
 function serializeKey(key) {
     return Object.keys(key).reduce(
         (acc, curr) => {
@@ -91,6 +95,10 @@ function deserialize(ser) {
         kset.add(deserializeKey(serkey), empt);
     });
     return empt;
+}
+
+function wrap_deserialize_key(ser) {
+    return { key: deserializeKey(ser) };
 }
 
 function deserializeKey(key) {
@@ -114,5 +122,7 @@ module.exports = {
     batch: wrap_batch,
     contents: wrap_contents,
     serialize,
-    deserialize
+    deserialize,
+    serializeKey: wrap_serialize_key,
+    deserializeKey: wrap_deserialize_key
 };
