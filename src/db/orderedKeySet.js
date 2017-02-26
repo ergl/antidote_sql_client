@@ -56,8 +56,8 @@ function wrap_subkeys({ key }, t) {
     return unwrap_js_t_list(kset.subkeys(key, t));
 }
 
-function wrap_batch(ini, fin) {
-    return unwrap_js_t_list(kset.batch(ini.key, fin.key));
+function wrap_batch(ini, fin, t) {
+    return unwrap_js_t_list(kset.batch(ini.key, fin.key, t));
 }
 
 function wrap_contents(t) {
@@ -70,6 +70,10 @@ function raw_contents(t) {
 
 function serialize(t) {
     return raw_contents(t).map(serializeKey);
+}
+
+function wrap_serialize_key({ key }) {
+    return serializeKey(key);
 }
 
 function serializeKey(key) {
@@ -93,6 +97,10 @@ function deserialize(ser) {
     return empt;
 }
 
+function wrap_deserialize_key(ser) {
+    return { key: deserializeKey(ser) };
+}
+
 function deserializeKey(key) {
     return Object.keys(key).reduce(
         (acc, curr) => {
@@ -114,5 +122,7 @@ module.exports = {
     batch: wrap_batch,
     contents: wrap_contents,
     serialize,
-    deserialize
+    deserialize,
+    serializeKey: wrap_serialize_key,
+    deserializeKey: wrap_deserialize_key
 };

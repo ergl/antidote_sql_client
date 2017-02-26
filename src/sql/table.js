@@ -9,8 +9,10 @@ const _schema = require('./meta/schema');
 const indices = require('./meta/indices');
 const keyEncoding = require('../db/keyEncoding');
 const tableMetadata = require('./tableMetadata');
+const orderedKeySet = require('../db/orderedKeySet');
 
 // TODO: Support user-defined primary keys (and non-numeric)
+// If allowed, should create an unique index on it
 // TODO: Allow null values into the database by omitting fields
 function create(remote, name, schema) {
     // Pick the head of the schema as an autoincremented primary key
@@ -63,17 +65,15 @@ function insertInto_Unsafe(remote, table, mapping) {
             // TODO: Add bottom value for nullable fields
             return _schema.validateSchema(remote, table, schema).then(r => {
                 if (!r) throw new Error('Invalid schema');
-
-                return swapFKReferences_Unsafe(remote, table, mapping);
+                return checkFK_Unsafe(remote, table, mapping);
             });
         })
-        .then(({ valid, result }) => {
+        .then(valid => {
             if (!valid) throw new Error('FK constraint failed');
-            const f_pk_value = pks.fetchAddPrimaryKey_T(remote, table);
-            return f_pk_value.then(pk_value => ({ pk_value, result }));
+            return pks.fetchAddPrimaryKey_T(remote, table);
         })
-        .then(({ pk_value, result }) => {
-            const field_names = Object.keys(result);
+        .then(pk_value => {
+            const field_names = Object.keys(mapping);
             const pk_key = keyEncoding.spk(table, keyEncoding.d_int(pk_value));
             const field_keys = field_names.map(f => {
                 return keyEncoding.field(table, keyEncoding.d_int(pk_value), f);
@@ -100,14 +100,15 @@ function insertInto_Unsafe(remote, table, mapping) {
 // - A value X may only be inserted into the child column if X also exists in the parent column.
 // - A value X in a child column may only be updated to a value Y if Y exists in the parent column.
 //
-// If both conditions are met, return { valid: bool, result: mapping } where result represents the new
-// mapping of fields -> values to be inserted in the database. Foreign keys are represented as pointers
-// to the actual value they reference, obviating extra work during updates at the cost of an extra `get`
-// off the database when reading that field.
+// Return true if both conditions are met. Foreign keys are represented as regular fields,
+// plus some metadata attached to the table. This means that every insert and update has
+// to check in the parent table, and updates to the parent table will have to check
+// referencing tables. In contrast, reads of foreign keys incur no extra cost.
 //
 // This function is unsafe. It MUST be ran inside a transaction.
 //
-function swapFKReferences_Unsafe(remote, table, mapping) {
+// TODO: Check infks as well
+function checkFK_Unsafe(remote, table, mapping) {
     const field_names = Object.keys(mapping);
     const correlated = fks.correlateFKs_T(remote, table, field_names);
 
@@ -122,46 +123,22 @@ function swapFKReferences_Unsafe(remote, table, mapping) {
         const valid_checks = relation.map(({ reference_table, field_name }) => {
             const range = mapping[field_name];
             const f_select = select_T(remote, reference_table, field_name, range);
-            const valid = f_select
-                .then(row => {
-                    assert(row.length === 1);
-                    const value = row[0][field_name];
+            return f_select
+                .then(rows => {
+                    // FIXME: Use unique index instead
+                    assert(rows.length === 1);
+                    const value = rows[0][field_name];
                     return value === mapping[field_name];
                 })
                 .catch(cutoff_error => {
                     console.log(cutoff_error);
                     return false;
                 });
-
-            return valid.then(v => {
-                if (!v) throw new Error('FK constraint failed');
-                return {
-                    k: field_name,
-                    v: keyEncoding.spk(table, keyEncoding.d_int(mapping[field_name]))
-                };
-            });
         });
 
-        return Promise.all(valid_checks)
-            .then(to_swap => {
-                const swapped = to_swap.reduce(
-                    (acc, { k, v }) => {
-                        return Object.assign(acc, { [k]: v });
-                    },
-                    mapping
-                );
-
-                return {
-                    valid: true,
-                    result: swapped
-                };
-            })
-            .catch(_ => {
-                return {
-                    valid: false,
-                    result: undefined
-                };
-            });
+        return Promise.all(valid_checks).then(all_checks => {
+            return all_checks.every(e => e === true);
+        });
     });
 }
 
@@ -306,6 +283,7 @@ function select_T(remote, table, fields, pk_value) {
 // This function is unsafe. It MUST be ran inside a transaction.
 //
 // TODO: Support complex predicates
+// TODO: Think about selects on FKs (do we follow the key)
 function select_Unsafe(remote, table, field, pk_value) {
     const pk_values = utils.arreturn(pk_value);
     const fields = utils.arreturn(field);

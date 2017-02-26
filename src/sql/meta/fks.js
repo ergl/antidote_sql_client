@@ -10,6 +10,7 @@ const keyEncoding = require('./../../db/keyEncoding');
 // another transaction (given that the current API doesn't allow nested transaction).
 // In that case, all operations will be executed in the current transaction.
 //
+// TODO: Move this to table creation
 function addFK_T(remote, table_name, mapping) {
     return kv.runT(remote, function(tx) {
         return addFK_Unsafe(tx, table_name, mapping);
@@ -50,9 +51,22 @@ function addFK_Unsafe(remote, table_name, mapping) {
     return check.then(r => {
         if (!r) throw new Error("Can't add fk on non-existent field");
 
-        return getFKs(remote, table_name).then(fk_tuples => {
+        const f_outfk = getFKs(remote, table_name).then(fk_tuples => {
             return setFK(remote, table_name, fk_tuples.concat(table_mapping));
         });
+
+        const f_infks = table_mapping.map(({ reference_table }) => {
+            return getInFKs(remote, reference_table).then(fk_tuples => {
+                const in_fk_mapping = utils.mapO(mapping, (k, v) => {
+                    return {
+                        [k]: k === 'reference_table' ? table_name : v
+                    };
+                });
+                return setInFK(remote, reference_table, fk_tuples.concat(in_fk_mapping));
+            });
+        });
+
+        return Promise.all([f_infks, f_outfk]);
     });
 }
 
@@ -64,25 +78,42 @@ function addFK_Unsafe(remote, table_name, mapping) {
 function getFKs(remote, table_name) {
     const meta_key = keyEncoding.table(table_name);
     return kv.get(remote, meta_key).then(meta => {
-        const fks = meta.fks;
+        const fks = meta.outfks;
         return fks === undefined ? [] : fks;
     });
 }
 
-// setFK(r, t, fk) will set the fks map list of the table `t` to `fk`
+// Given a table name, return a list of maps
+// `{field_name, reference_table} describing the foreign keys pointing to that table.
+//
+// Will return the empty list if there are no foreign keys.
+//
+function getInFKs(remote, table_name) {
+    const meta_key = keyEncoding.table(table_name);
+    return kv.get(remote, meta_key).then(meta => {
+        const fks = meta.outfks;
+        return fks === undefined ? [] : fks;
+    });
+}
+
+// setFK(r, t, fk) will set the outgoing fk map list of the table `t` to `fk`
 function setFK(remote, table_name, fks) {
     const meta_key = keyEncoding.table(table_name);
     return kv.runT(remote, function(tx) {
         return kv.get(tx, meta_key).then(meta => {
-            return kv.put(tx, meta_key, Object.assign(meta, { fks }));
+            return kv.put(tx, meta_key, Object.assign(meta, { outfks: fks }));
         });
     });
 }
 
-// Given a table and one of its fields, check if that
-// field is a foreign key.
-function isFK(remote, table_name, field) {
-    return getFKs(remote, table_name, field).then(r => r.length !== 0);
+// setFK(r, t, fk) will set the inbound fk map list of the table `t` to `fk`
+function setInFK(remote, table_name, fks) {
+    const meta_key = keyEncoding.table(table_name);
+    return kv.runT(remote, function(tx) {
+        return kv.get(tx, meta_key).then(meta => {
+            return kv.put(tx, meta_key, Object.assign(meta, { infks: fks }));
+        });
+    });
 }
 
 // See correlateFKs_Unsafe for details.
@@ -115,7 +146,6 @@ function correlateFKs_Unsafe(remote, table_name, field_name) {
 }
 
 module.exports = {
-    isFK,
     addFK_T,
     correlateFKs_T
 };
