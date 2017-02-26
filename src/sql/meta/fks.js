@@ -80,11 +80,6 @@ function setFK(remote, table_name, fks) {
     });
 }
 
-// Given a table and one of its fields, check if that
-// field is a foreign key.
-function isFK(remote, table_name, field) {
-    return getFKs(remote, table_name, field).then(r => r.length !== 0);
-}
 
 // See correlateFKs_Unsafe for details.
 //
@@ -116,7 +111,6 @@ function correlateFKs_Unsafe(remote, table_name, field_name) {
 }
 
 module.exports = {
-    isFK,
     addFK_T,
     correlateFKs_T
 };
