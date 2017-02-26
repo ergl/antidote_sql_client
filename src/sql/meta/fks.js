@@ -70,6 +70,19 @@ function getFKs(remote, table_name) {
     });
 }
 
+// Given a table name, return a list of maps
+// `{field_name, reference_table} describing the foreign keys pointing to that table.
+//
+// Will return the empty list if there are no foreign keys.
+//
+function getInFKs(remote, table_name) {
+    const meta_key = keyEncoding.table(table_name);
+    return kv.get(remote, meta_key).then(meta => {
+        const fks = meta.outfks;
+        return fks === undefined ? [] : fks;
+    });
+}
+
 // setFK(r, t, fk) will set the outgoing fk map list of the table `t` to `fk`
 function setFK(remote, table_name, fks) {
     const meta_key = keyEncoding.table(table_name);
@@ -80,6 +93,15 @@ function setFK(remote, table_name, fks) {
     });
 }
 
+// setFK(r, t, fk) will set the inbound fk map list of the table `t` to `fk`
+function setInFK(remote, table_name, fks) {
+    const meta_key = keyEncoding.table(table_name);
+    return kv.runT(remote, function(tx) {
+        return kv.get(tx, meta_key).then(meta => {
+            return kv.put(tx, meta_key, Object.assign(meta, { infks: fks }));
+        });
+    });
+}
 
 // See correlateFKs_Unsafe for details.
 //

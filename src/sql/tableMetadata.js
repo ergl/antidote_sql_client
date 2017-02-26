@@ -4,6 +4,7 @@ const keyEncoding = require('./../db/keyEncoding');
 function createMeta(remote, table_name, pk_field, schema) {
     const meta_key = keyEncoding.table(table_name);
     const meta_content = {
+        infks: [],
         outfks: [],
         indices: [],
         uindices: [],
