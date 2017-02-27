@@ -283,7 +283,6 @@ function select_T(remote, table, fields, pk_value) {
 // This function is unsafe. It MUST be ran inside a transaction.
 //
 // TODO: Support complex predicates
-// TODO: Think about selects on FKs (do we follow the key)
 function select_Unsafe(remote, table, field, pk_value) {
     const pk_values = utils.arreturn(pk_value);
     const fields = utils.arreturn(field);
@@ -353,8 +352,9 @@ function scan_Unsafe(remote, table, range) {
             const f_pk_field = pks.getPKField(remote, table);
 
             // And remove if from the schema, as the pk field is encoded differently.
-            const f_non_pk_fields = f_pk_field.then(pk_field =>
-                schema.filter(f => f !== pk_field));
+            const f_non_pk_fields = f_pk_field.then(pk_field => {
+                return schema.filter(f => f !== pk_field);
+            });
 
             // For every key, fetch and read the field subkeys
             const f_results = keys.map((key, idx) => {
