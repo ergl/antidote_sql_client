@@ -9,7 +9,6 @@ const _schema = require('./meta/schema');
 const indices = require('./meta/indices');
 const keyEncoding = require('../db/keyEncoding');
 const tableMetadata = require('./tableMetadata');
-const orderedKeySet = require('../db/orderedKeySet');
 
 // TODO: Support user-defined primary keys (and non-numeric)
 // If allowed, should create an unique index on it
