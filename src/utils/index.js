@@ -70,6 +70,23 @@ function filterOKeys(obj, fn) {
     );
 }
 
+// filterOKeys({ k: v, ... }, fn) will return { k: v } such that fn(k, v) = true
+function filterO(obj, fn) {
+    return Object.keys(obj).reduce(
+        (acc, curr_key) => {
+            let res;
+            const curr_value = obj[curr_key];
+            if (fn(curr_key, curr_value)) {
+                res = Object.assign(acc, { [curr_key]: curr_value });
+            } else {
+                res = acc;
+            }
+            return res;
+        },
+        {}
+    );
+}
+
 module.exports = {
     squash,
     flatten,
@@ -77,5 +94,6 @@ module.exports = {
     mapO,
     mapOKeys,
     mapOValues,
+    filterO,
     filterOKeys
 };
