@@ -290,7 +290,7 @@ function select_Unsafe(remote, table, field, where) {
     switch (selectType) {
         // TODO: Gross
         case 'primary':
-            const perform_scan = lookup_fields => {
+            const perform_primary_scan = lookup_fields => {
                 const pk_values = where[selectType];
                 const f_values = scanPrimary_T(remote, table, pk_values);
                 return f_values.then(values => {
@@ -307,12 +307,12 @@ function select_Unsafe(remote, table, field, where) {
             if (fields.length === 1 && fields[0] === '*') {
                 return _schema
                     .getSchema(remote, table)
-                    .then(schema => perform_scan(schema));
+                    .then(schema => perform_primary_scan(schema));
             }
 
             return _schema.validateSchemaSubset(remote, table, fields).then(r => {
                 if (!r) throw new Error('Invalid schema');
-                return perform_scan(fields);
+                return perform_primary_scan(fields);
             });
 
         default:
@@ -416,7 +416,7 @@ function subkeyBatchScan_Unsafe(remote, key) {
 // Given a list of results from a scan, and a list of field names,
 // build an object { field: value }.
 //
-// Assumes length(row) == length(field_names)
+// Assumes length(row) = length(field_names)
 function toRow(row, field_names) {
     return row.reduce(
         (acc, curr, ix) => {
