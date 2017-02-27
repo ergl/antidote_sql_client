@@ -74,9 +74,9 @@ function insertInto_Unsafe(remote, table, mapping) {
         })
         .then(pk_value => {
             const field_names = Object.keys(mapping);
-            const pk_key = keyEncoding.spk(table, keyEncoding.d_int(pk_value));
+            const pk_key = keyEncoding.spk(table, pk_value);
             const field_keys = field_names.map(f => {
-                return keyEncoding.field(table, keyEncoding.d_int(pk_value), f);
+                return keyEncoding.field(table, pk_value, f);
             });
             const field_values = field_names.map(f => mapping[f]);
 
@@ -222,13 +222,7 @@ function updateUIndices(remote, table, fk_value, mapping) {
 // appropiate scan.
 function updateSingleIndex(_, table, index, fk_value, field_names, field_values) {
     const index_keys = field_names.map((fld_name, i) => {
-        return keyEncoding.index_key(
-            table,
-            index,
-            fld_name,
-            keyEncoding.d_string(field_values[i]),
-            keyEncoding.d_int(fk_value)
-        );
+        return keyEncoding.index_key(table, index, fld_name, field_values[i], fk_value);
     });
 
     // TODO: If bottom value is defined, use it for these keys
@@ -244,12 +238,7 @@ function updateSingleIndex(_, table, index, fk_value, field_names, field_values)
 // appropiate scan.
 function updateSingleUIndex(_, table, index, fk_value, field_names, field_values) {
     const uindex_keys = field_names.map((fld_name, i) => {
-        return keyEncoding.uindex_key(
-            table,
-            index,
-            fld_name,
-            keyEncoding.d_string(field_values[i])
-        );
+        return keyEncoding.uindex_key(table, index, fld_name, field_values[i]);
     });
 
     const uindex_values = field_names.map(_ => fk_value);
@@ -346,7 +335,7 @@ function scan_Unsafe(remote, table, range) {
         })
         .then(schema => {
             // For every k in key range, encode k
-            const keys = range.map(k => keyEncoding.spk(table, keyEncoding.d_int(k)));
+            const keys = range.map(k => keyEncoding.spk(table, k));
 
             // Get the primary key field.
             const f_pk_field = pks.getPKField(remote, table);
@@ -363,7 +352,7 @@ function scan_Unsafe(remote, table, range) {
                     [pk_field, fields]
                 ) => {
                     const field_keys = fields.map(f => {
-                        return keyEncoding.field(table, keyEncoding.d_int(range[idx]), f);
+                        return keyEncoding.field(table, range[idx], f);
                     });
                     // After encoding all fields, we append the pk key/field to the range we want to scan
                     return scanRow(
