@@ -53,11 +53,15 @@ function wrap_prev({ key }, t) {
 }
 
 function wrap_subkeys({ key }, t) {
-    return unwrap_js_t_list(kset.subkeys(key, t));
+    return unwrap_js_t_list(kset.subkeys(key, t)).map(key => {
+        return { key };
+    });
 }
 
 function wrap_batch(ini, fin, t) {
-    return unwrap_js_t_list(kset.batch(ini.key, fin.key, t));
+    return unwrap_js_t_list(kset.batch(ini.key, fin.key, t)).map(key => {
+        return { key };
+    });
 }
 
 function wrap_contents(t) {
