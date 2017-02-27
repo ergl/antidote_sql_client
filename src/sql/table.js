@@ -15,7 +15,12 @@ const tableMetadata = require('./tableMetadata');
 // TODO: Allow null values into the database by omitting fields
 function create(remote, name, schema) {
     // Pick the head of the schema as an autoincremented primary key
-    return tableMetadata.createMeta(remote, name, schema[0], schema);
+    // Sort the schema so it has the same order as in the key set
+    // (see orderedKeySet)
+    // TODO: Use locale-sensitive sort?
+    const [pk_field, ...rest] = schema;
+    rest.sort();
+    return tableMetadata.createMeta(remote, name, pk_field, [pk_field, ...rest]);
 }
 
 // See insertInto_Unsafe for details.
