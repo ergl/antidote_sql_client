@@ -160,11 +160,20 @@ function generateRef(remote, key) {
     return remote.register(key);
 }
 
+function keyBatch({ kset }, start, end) {
+    return orderedKeySet.batch(start, end, kset);
+}
+function subkeyBatch({ kset }, key) {
+    return orderedKeySet.subkeys(key, kset);
+}
+
 module.exports = {
     createRemote,
     closeRemote,
     runT,
     get,
     put,
-    condPut
+    condPut,
+    keyBatch,
+    subkeyBatch
 };
