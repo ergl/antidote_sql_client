@@ -117,11 +117,12 @@ function checkFK_Unsafe(remote, table, mapping) {
     // Foreign keys may be only created against primary keys, not arbitrary fields
     // And given that primary keys are only autoincremented, and the database is append-only
     // We can check if a specific row exists by checking it its less or equal to the keyrange
-    // The actual logic for the cutoff is implemented inside select_T
+    // The actual logic for the cutoff is implemented inside select
     return correlated.then(relation => {
         const valid_checks = relation.map(({ reference_table, field_name }) => {
             const range = mapping[field_name];
-            const f_select = select_T(remote, reference_table, field_name, range);
+            const f_select = select(remote, reference_table, field_name, range);
+
             return f_select
                 .then(rows => {
                     // FIXME: Use unique index instead
@@ -250,9 +251,9 @@ function updateSingleUIndex(_, table, index, fk_value, field_names, field_values
 // another transaction (given that the current API doesn't allow nested transaction).
 // In that case, all operations will be executed in the current transaction.
 //
-function select_T(remote, table, fields, pk_value) {
+function select(remote, table, fields, where) {
     return kv.runT(remote, function(tx) {
-        return select_Unsafe(tx, table, fields, pk_value);
+        return select_Unsafe(tx, table, fields, where);
     });
 }
 
@@ -384,6 +385,6 @@ function scanRow(remote, field_keys, fields) {
 module.exports = {
     create,
     scan_T,
-    select_T,
+    select,
     insertInto_T
 };
