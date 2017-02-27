@@ -80,7 +80,7 @@ function put({ remote, kset }, key, value) {
     if (!isTxHandle(remote)) throw new Error('Calling put outside a transaction');
 
     const keys = utils.arreturn(key);
-    const readable_keys = keys.map(({ key }) => keyEncoding.toString(key));
+    const readable_keys = keys.map(keyEncoding.toString);
     const values = utils.arreturn(value);
 
     const refs = readable_keys.map(k => generateRef(remote, k));
@@ -125,7 +125,7 @@ function get({ remote }, key, { unsafe } = { unsafe: false }) {
         return Promise.resolve([]);
     }
 
-    const readable_keys = keys.map(({ key }) => keyEncoding.toString(key));
+    const readable_keys = keys.map(keyEncoding.toString);
 
     const refs = readable_keys.map(k => generateRef(remote, k));
     return remote.readBatch(refs).then(read_values => {

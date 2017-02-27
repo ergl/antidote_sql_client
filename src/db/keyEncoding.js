@@ -26,6 +26,10 @@ function wrap_uindex_key(t, i, f, v) {
     return { key: kset.uindex_key(t, i, f, kset.d_string(v)) };
 }
 
+function wrap_string({ key }) {
+    return kset.repr(key);
+}
+
 module.exports = {
     set_key,
     table: wrap_table,
@@ -33,5 +37,5 @@ module.exports = {
     field: wrap_field,
     index_key: wrap_index_key,
     uindex_key: wrap_uindex_key,
-    toString: kset.repr
+    toString: wrap_string
 };
