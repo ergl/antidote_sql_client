@@ -126,7 +126,9 @@ function checkFK_Unsafe(remote, table, mapping) {
     return correlated.then(relation => {
         const valid_checks = relation.map(({ reference_table, field_name }) => {
             const range = mapping[field_name];
-            const f_select = select(remote, reference_table, field_name, range);
+            const f_select = select(remote, reference_table, field_name, {
+                primary: range
+            });
 
             return f_select
                 .then(rows => {
@@ -262,13 +264,15 @@ function select(remote, table, fields, where) {
     });
 }
 
-// select_Unsafe(_, t, [f1, f2, ..., fn], pk) will perform
-// SELECT f1, f2, ..., fn FROM t where {pk_field} = pk
+// select_Unsafe(_, t, [f1, f2, ..., fn], predicate) will perform
+// SELECT f1, f2, ..., fn FROM t where predicate = true
 //
-// Only supports predicates against the primary key field, and restricted
-// to the form `id = x` or `id = a AND id = b (...) AND id = z`. To select
-// more than one key, pass a key list as the last parameter:
-// `select_Unsafe(_, _, _, [k1, k2, ..., kn])`.
+// Only supports predicates against primary key fields, restricted to the
+// form `pk = s` or `pk = x AND y ... AND z`. To do so, `where` should be
+// `{ primary: (key | [...keys]) }`.
+//
+// Should be called as follows
+// `select_Unsafe(_, _, _, { primary: key | [...keys] })`
 //
 // Supports for wildard select by calling `select_Unsafe(_, _, '*', _)`
 //
@@ -277,119 +281,153 @@ function select(remote, table, fields, where) {
 // This function is unsafe. It MUST be ran inside a transaction.
 //
 // TODO: Support complex predicates
-function select_Unsafe(remote, table, field, pk_value) {
-    const pk_values = utils.arreturn(pk_value);
+function select_Unsafe(remote, table, field, where) {
     const fields = utils.arreturn(field);
+    const whereKeys = Object.keys(where);
+    // FIXME: Improve 'where' representation (use a function?)
+    assert(whereKeys.length === 1);
+    const selectType = whereKeys[0];
+    switch (selectType) {
+        // TODO: Gross
+        case 'primary':
+            const perform_scan = lookup_fields => {
+                const pk_values = where[selectType];
+                const f_values = scanPrimary_T(remote, table, pk_values);
+                return f_values.then(values => {
+                    return values.map(row => {
+                        // Only keep the fields we want from the row
+                        return utils.filterOKeys(row, key => {
+                            return lookup_fields.includes(key);
+                        });
+                    });
+                });
+            };
 
-    const perform_scan = lookup_fields => {
-        // We MUST be inside a transaction, so the call to `scan_T` MUST NOT spawn a new transaction.
-        return scan_T(remote, table, pk_values).then(res => res.map(row => {
-            return Object.keys(row)
-                .filter(k => lookup_fields.includes(k))
-                .reduce((acc, k) => Object.assign(acc, { [k]: row[k] }), {});
-        }));
-    };
+            // If we query '*', get the entire schema
+            if (fields.length === 1 && fields[0] === '*') {
+                return _schema
+                    .getSchema(remote, table)
+                    .then(schema => perform_scan(schema));
+            }
 
-    // If we query '*', get the entire schema
-    if (fields.length === 1 && fields[0] === '*') {
-        return _schema.getSchema(remote, table).then(schema => perform_scan(schema));
+            return _schema.validateSchemaSubset(remote, table, fields).then(r => {
+                if (!r) throw new Error('Invalid schema');
+                return perform_scan(fields);
+            });
+
+        default:
+            throw new Error(`Select type ${selectType} not supported`);
     }
-
-    return _schema.validateSchemaSubset(remote, table, fields).then(r => {
-        if (!r) throw new Error('Invalid schema');
-        return perform_scan(fields);
-    });
 }
 
-// See scan_Unsafe for details.
+// See scanPrimary_Unsafe for details.
 //
 // This function will start a new transaction by default, unless called from inside
 // another transaction (given that the current API doesn't allow nested transaction).
 // In that case, all operations will be executed in the current transaction.
 //
-function scan_T(remote, table, range) {
+function scanPrimary_T(remote, table, pkRange) {
     return kv.runT(remote, function(tx) {
-        return scan_Unsafe(tx, table, range);
+        return scanPrimary_Unsafe(tx, table, pkRange);
     });
 }
 
-// Given a table name, and a list of primary keys, will recursively
-// retrieve all the subkeys of each key, returning a list of rows.
+// Given a table name, and a range of primary keys (in the form of [start, end]),
+// will fetch the appropiate subkey batch and get all the values from those.
+// Only supports selects against primary keys.
 //
 // Will fail if the scan goes out of bounds of max(table.pk_value)
 //
 // This function is unsafe. It MUST be ran inside a transaction.
 //
-// TODO: Support any key with subkeys (pks, index names, index pks)
-// TODO: Change range from array to something more complex
-function scan_Unsafe(remote, table, range) {
+// FIXME: Fetch only appropiate keys
+// Right now the scan is too eager, as it fetches the keys for all the
+// fields, even if we only use a single result. Not trivial to know, however,
+// as selects that are part of joins might not now which fields are going to
+// be used as part of the join.
+function scanPrimary_Unsafe(remote, table, pkRange) {
+    const pkBatch = utils.arreturn(pkRange);
+    const [pkStart, pkEnd] = pkBatch.length === 1 ? [pkBatch, pkBatch] : pkBatch;
+
     // Assumes keys are numeric
-    const f_cutoff = pks.getCurrentKey(remote, table).then(m => {
-        return range.find(e => e > m);
+    // Only useful for primary keys
+    //
+    // FIXME: Change if using user-defined primary keys
+    // In that case, should look in the appropiate unique index
+    const f_validRange = pks.getCurrentKey(remote, table).then(max => {
+        return pkEnd <= max;
     });
 
-    return f_cutoff
-        .then(cutoff => {
-            if (cutoff !== undefined) {
+    return f_validRange
+        .then(validRange => {
+            if (!validRange) {
                 throw new Error(
-                    `scan of key ${cutoff} on ${table} is out of valid range`
+                    `scanPrimary of key ${pkEnd} on ${table} is out of valid range`
                 );
             }
 
             return _schema.getSchema(remote, table);
         })
         .then(schema => {
-            // For every k in key range, encode k
-            const keys = range.map(k => keyEncoding.spk(table, k));
-
-            // Get the primary key field.
-            const f_pk_field = pks.getPKField(remote, table);
-
-            // And remove if from the schema, as the pk field is encoded differently.
-            const f_non_pk_fields = f_pk_field.then(pk_field => {
-                return schema.filter(f => f !== pk_field);
-            });
-
-            // For every key, fetch and read the field subkeys
-            const f_results = keys.map((key, idx) => {
-                // `Promise.all` guarantees the same order in promises and results
-                return Promise.all([f_pk_field, f_non_pk_fields]).then((
-                    [pk_field, fields]
-                ) => {
-                    const field_keys = fields.map(f => {
-                        return keyEncoding.field(table, range[idx], f);
-                    });
-                    // After encoding all fields, we append the pk key/field to the range we want to scan
-                    return scanRow(
-                        remote,
-                        field_keys.concat(key),
-                        fields.concat(pk_field)
-                    );
+            // scan(A, A) is equivalent to subkeys(A)
+            if (pkBatch.length === 1) {
+                const [pkStart] = pkBatch;
+                const key = keyEncoding.spk(table, pkStart);
+                return subkeyBatchScan_Unsafe(remote, key).then(r => {
+                    return [toRow(r, schema)];
                 });
-            });
+            }
 
-            // Execute all scanRow calls in parallel
-            return Promise.all(f_results);
+            const keys = [keyEncoding.spk(table, pkStart), keyEncoding.spk(table, pkEnd)];
+            const [_, endKey] = keys;
+
+            // Given that batch ranges are exclusive on the right,
+            // We do batch(A,B) + subkeys(B), given that
+            // batch(A,B) + subkeys(B) = batch(A, B+1)
+            return Promise.all([
+                batchScan_Unsafe(remote, keys),
+                subkeyBatchScan_Unsafe(remote, endKey)
+            ]).then(results => {
+                return results.map(r => toRow(r, schema));
+            });
         });
 }
 
-// Given a list of encoded keys, and a matching list of field names,
-// build an object s.t. `{f: get(k)}` for every k in field_keys, f in fields
-function scanRow(remote, field_keys, fields) {
-    return kv.get(remote, field_keys).then(values => {
-        return values.reduce(
-            (acc, val, idx) => {
-                const field_name = fields[idx];
-                return Object.assign(acc, { [field_name]: val });
-            },
-            {}
-        );
-    });
+// Given a range [start, end) of keys, get the values for
+// all the keys inside the range.
+function batchScan_Unsafe(remote, [start, end]) {
+    const keys = kv.keyBatch(remote, start, end);
+    return kv.get(remote, keys);
+}
+
+// Given a key, fetch all the subkeys and then get the
+// values for those.
+//
+// The hierarchy for keys is
+// - table > pks > fields
+// - table > indices
+// - table > unique-indices
+// For more details, see orderedKeySet / Kset lib
+function subkeyBatchScan_Unsafe(remote, key) {
+    const keys = kv.subkeyBatch(remote, key);
+    return kv.get(remote, keys);
+}
+
+// Given a list of results from a scan, and a list of field names,
+// build an object { field: value }.
+//
+// Assumes length(row) == length(field_names)
+function toRow(row, field_names) {
+    return row.reduce(
+        (acc, curr, ix) => {
+            return Object.assign(acc, { [field_names[ix]]: curr });
+        },
+        {}
+    );
 }
 
 module.exports = {
     create,
-    scan_T,
     select,
     insertInto_T
 };
