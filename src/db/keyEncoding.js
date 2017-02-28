@@ -11,30 +11,51 @@ function wrap_table(t) {
 }
 
 function wrap_spk(t, any) {
-    return { key: kset.spk(t, any) };
+    return { key: kset.spk(t, kset.d_int(any)) };
 }
 
 function wrap_field(t, n, fl) {
-    return { key: kset.field(t, n, fl) };
+    return { key: kset.field(t, kset.d_int(n), fl) };
 }
 
 function wrap_index_key(t, i, f, v, k) {
-    return { key: kset.index_key(t, i, f, v, k) };
+    return { key: kset.index_key(t, i, f, kset.d_string(v), kset.d_int(k)) };
 }
 
 function wrap_uindex_key(t, i, f, v) {
-    return { key: kset.uindex_key(t, i, f, v) };
+    return { key: kset.uindex_key(t, i, f, kset.d_string(v)) };
+}
+
+function wrap_is_data({ key }) {
+    return kset.is_data(key);
+}
+
+function wrap_is_index({ key }) {
+    return kset.is_index(key);
+}
+
+function wrap_is_uindex({ key }) {
+    return kset.is_uindex(key);
+}
+
+function wrap_string({ key }) {
+    return kset.repr(key);
+}
+
+function wrap_field_from_key({ key }) {
+    return kset.field_from_key(key);
 }
 
 module.exports = {
-    d_int: kset.d_int,
-    d_float: kset.d_float,
-    d_string: kset.d_string,
     set_key,
     table: wrap_table,
     spk: wrap_spk,
     field: wrap_field,
     index_key: wrap_index_key,
     uindex_key: wrap_uindex_key,
-    toString: kset.repr
+    isData: wrap_is_data,
+    isIndex: wrap_is_index,
+    isUIndex: wrap_is_uindex,
+    fieldFromKey: wrap_field_from_key,
+    toString: wrap_string
 };

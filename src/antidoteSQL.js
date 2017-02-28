@@ -11,5 +11,5 @@ module.exports = {
     createIndex: indices.addIndex,
     createUniqueIndex: indices.addUniqueIndex,
     insert: table.insertInto_T,
-    select: table.select_T
+    select: table.select
 };
