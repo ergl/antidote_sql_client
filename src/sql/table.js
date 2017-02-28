@@ -267,12 +267,17 @@ function select(remote, table, fields, where) {
 // select_Unsafe(_, t, [f1, f2, ..., fn], predicate) will perform
 // SELECT f1, f2, ..., fn FROM t where predicate = true
 //
-// Only supports predicates against primary key fields, restricted to the
-// form `pk = s` or `pk = x AND y ... AND z`. To do so, `where` should be
+// Supports predicates against primary key fields, restricted to the
+// form `pk = s` or `pk = x OR y ... OR z`. To do so, `where` should be
 // `{ primary: (key | [...keys]) }`.
 //
 // Should be called as follows
 // `select_Unsafe(_, _, _, { primary: key | [...keys] })`
+// This translates to SELECT [...] FROM TABLE WHERE key = X | key = X OR key = Y
+//
+// To query against specific fields, use the following notation
+// `select_Unsafe(_, _, _, { field: { field_a: "foo", field_b: "bar" } })`
+// This will translate to SELECT [...] FROM TABLE WHERE field_a = "foo" AND field_b = "bar"
 //
 // Supports for wildard select by calling `select_Unsafe(_, _, '*', _)`
 //
@@ -281,6 +286,17 @@ function select(remote, table, fields, where) {
 // This function is unsafe. It MUST be ran inside a transaction.
 //
 // TODO: Support complex predicates
+// TODO: Change where to the following
+// We can use a mapping, like
+// { field_a: "value_a" | ["value_a", "value_b", field_b: () ... more fields }
+// each key in the map represents an AND (field_a = [] AND field_b = [] ...)
+// each value can be a simple value (X = Y), or an array, interpreted as
+// X = Y OR X = Z OR ...
+// Using this mapping, we can autodetect if a primary key is being used,
+// so we use scanPrimary instead of scanData
+// Caveats: Even if we detect an index (or unique index) on one of the queried
+// fields, we would need JOIN to support that.
+// FIXME: Revisit WHERE once JOINS are implemented
 function select_Unsafe(remote, table, field, where) {
     const fields = utils.arreturn(field);
 
