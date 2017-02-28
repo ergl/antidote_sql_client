@@ -415,32 +415,37 @@ function scanPrimary_Unsafe(remote, table, pkRange) {
             return _schema.getSchema(remote, table);
         })
         .then(schema => {
-            // scan(A, A) is equivalent to subkeys(A)
+            // If called with just one key, like scan(A, A),
+            // fetch subkeys(A) instead
             if (pkBatch.length === 1) {
                 const [pkStart] = pkBatch;
                 const key = keyEncoding.spk(table, pkStart);
-                return subkeyBatchScan_Unsafe(remote, key).then(r => {
+                const keyBatch = kv.subkeyBatch(remote, key);
+                return kv.get(remote, keyBatch).then(r => {
                     return [toRow(r, schema)];
                 });
             }
 
-            const keys = [keyEncoding.spk(table, pkStart), keyEncoding.spk(table, pkEnd)];
-            const [_, endKey] = keys;
+            const [startKey, endKey] = [
+                keyEncoding.spk(table, pkStart),
+                keyEncoding.spk(table, pkEnd)
+            ];
 
-            // Given that batch ranges are exclusive on the right,
-            // We do batch(A,B) + subkeys(B), given that
-            // batch(A,B) + subkeys(B) = batch(A, B+1)
-            return Promise.all([
-                batchScan_Unsafe(remote, keys),
-                subkeyBatchScan_Unsafe(remote, endKey)
-            ]).then(results => {
-                return results.map(r => toRow(r, schema));
+            // Given that we're interested in the subkeys of the primary key,
+            // we combine batch(A,B) + strictSubkeys(B)
+            const firstBatch = kv.keyBatch(remote, startKey, endKey);
+            const subkeyBatch = kv.strictSubkeyBatch(remote, endKey);
+            const keyBatch = firstBatch.concat(subkeyBatch);
+
+            return kv.get(remote, keyBatch).then(results => {
+                return toRowExt(results, schema);
             });
         });
 }
 
 function scanData(remote, table) {
     const f_schema = _schema.getSchema(remote, table);
+
     const rootKey = keyEncoding.table(table);
     const keys = kv.subkeyBatch(remote, rootKey).filter(keyEncoding.isData);
     return kv.get(remote, keys).then(values => {
@@ -448,26 +453,6 @@ function scanData(remote, table) {
             return toRowExt(values, schema);
         });
     });
-}
-
-// Given a range [start, end) of keys, get the values for
-// all the keys inside the range.
-function batchScan_Unsafe(remote, [start, end]) {
-    const keys = kv.keyBatch(remote, start, end);
-    return kv.get(remote, keys);
-}
-
-// Given a key, fetch all the subkeys and then get the
-// values for those.
-//
-// The hierarchy for keys is
-// - table > pks > fields
-// - table > indices
-// - table > unique-indices
-// For more details, see orderedKeySet / Kset lib
-function subkeyBatchScan_Unsafe(remote, key) {
-    const keys = kv.subkeyBatch(remote, key);
-    return kv.get(remote, keys);
 }
 
 // Given a list of results from a scan, and a list of field names,
