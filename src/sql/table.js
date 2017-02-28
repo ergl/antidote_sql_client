@@ -319,6 +319,32 @@ function select_Unsafe(remote, table, field, where) {
 
             return f_field_args.then(perform_primary_scan);
 
+        case 'field':
+            const perform_data_scan = lookup_fields => {
+                const predicate_fields = where[selectType];
+                // Grab all the data keys from the table (parallel scan of
+                // all the table, really poor case), convert to row objects.
+                const f_values = scanData(remote, table);
+
+                return f_values.then(rows => {
+                    // then filter depending on predicate given.
+                    const filtered = rows.filter(row => {
+                        const valid = Object.keys(predicate_fields).map(k => {
+                            return row[k] === predicate_fields[k];
+                        });
+
+                        return valid.every(c => c === true);
+                    });
+
+                    // Finally extract the values we want.
+                    return filtered.map(row => {
+                        return utils.filterOKeys(row, key => lookup_fields.includes(key));
+                    });
+                });
+            };
+
+            return f_field_args.then(perform_data_scan);
+
         default:
             throw new Error(`Select type ${selectType} not supported`);
     }
@@ -397,6 +423,17 @@ function scanPrimary_Unsafe(remote, table, pkRange) {
         });
 }
 
+function scanData(remote, table) {
+    const f_schema = _schema.getSchema(remote, table);
+    const rootKey = keyEncoding.table(table);
+    const keys = kv.subkeyBatch(remote, rootKey).filter(keyEncoding.isData);
+    return kv.get(remote, keys).then(values => {
+        return f_schema.then(schema => {
+            return toRowExt(values, schema);
+        });
+    });
+}
+
 // Given a range [start, end) of keys, get the values for
 // all the keys inside the range.
 function batchScan_Unsafe(remote, [start, end]) {
@@ -428,6 +465,32 @@ function toRow(row, field_names) {
         },
         {}
     );
+}
+
+// Given a list of results from a scan, and a list of field names,
+// build an object { field: value }.
+//
+// If length(row) > length(field_names), it will build multiple rows.
+// Assumes length(row) = N * length(field_names)
+// For example:
+// toRowExt([1,2,3,1,2,3], ['foo','bar','baz'])
+// => [ { foo: 1, bar: 2, baz: 3 }, { foo: 1, bar: 2, baz: 3 } ]
+function toRowExt(row, field_names) {
+    const res = [];
+
+    let vi = 0;
+    while (vi < row.length) {
+        const obj = field_names.reduce(
+            (acc, f, ix) => {
+                return Object.assign(acc, { [f]: row[ix + vi] });
+            },
+            {}
+        );
+        res.push(obj);
+        vi = vi + field_names.length;
+    }
+
+    return res;
 }
 
 module.exports = {
