@@ -52,7 +52,12 @@ function wrap_prev({ key }, t) {
     return kset.prev_key(key, t);
 }
 
-function wrap_subkeys({ key }, t) {
+function wrap_subkeys(key, t) {
+    const strict_subkeys = wrap_strict_subkeys(key, t);
+    return [key, ...strict_subkeys];
+}
+
+function wrap_strict_subkeys({ key }, t) {
     return unwrap_js_t_list(kset.subkeys(key, t)).map(key => {
         return { key };
     });
@@ -123,6 +128,7 @@ module.exports = {
     next_key: wrap_next,
     prev_key: wrap_prev,
     subkeys: wrap_subkeys,
+    strictSubKeys: wrap_strict_subkeys,
     batch: wrap_batch,
     contents: wrap_contents,
     serialize,

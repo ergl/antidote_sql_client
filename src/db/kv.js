@@ -163,8 +163,13 @@ function generateRef(remote, key) {
 function keyBatch({ kset }, start, end) {
     return orderedKeySet.batch(start, end, kset);
 }
+
 function subkeyBatch({ kset }, key) {
     return orderedKeySet.subkeys(key, kset);
+}
+
+function strictSubkeyBatch({ kset }, key) {
+    return orderedKeySet.strictSubKeys(key, kset);
 }
 
 module.exports = {
@@ -175,5 +180,6 @@ module.exports = {
     put,
     condPut,
     keyBatch,
-    subkeyBatch
+    subkeyBatch,
+    strictSubkeyBatch
 };
