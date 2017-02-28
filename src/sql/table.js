@@ -283,37 +283,41 @@ function select(remote, table, fields, where) {
 // TODO: Support complex predicates
 function select_Unsafe(remote, table, field, where) {
     const fields = utils.arreturn(field);
-    const whereKeys = Object.keys(where);
+
+    let f_field_args;
+    if (fields.length === 1 && fields[0] === '*') {
+        // If we query '*', get the entire schema
+        f_field_args = _schema.getSchema(remote, table);
+    } else {
+        f_field_args = _schema.validateSchemaSubset(remote, table, fields).then(r => {
+            if (!r) throw new Error('Invalid schema');
+            return fields;
+        });
+    }
+
     // FIXME: Improve 'where' representation (use a function?)
+    const whereKeys = Object.keys(where);
+    // TODO: Gross
     assert(whereKeys.length === 1);
+
     const selectType = whereKeys[0];
     switch (selectType) {
         // TODO: Gross
         case 'primary':
             const perform_primary_scan = lookup_fields => {
                 const pk_values = where[selectType];
+                // Grab all the field subkeys for every primary key given
+                // Read the values, convert to row object
                 const f_values = scanPrimary_T(remote, table, pk_values);
-                return f_values.then(values => {
-                    return values.map(row => {
-                        // Only keep the fields we want from the row
-                        return utils.filterOKeys(row, key => {
-                            return lookup_fields.includes(key);
-                        });
+                // Finally extract the values we want
+                return f_values.then(rows => {
+                    return rows.map(row => {
+                        return utils.filterOKeys(row, key => lookup_fields.includes(key));
                     });
                 });
             };
 
-            // If we query '*', get the entire schema
-            if (fields.length === 1 && fields[0] === '*') {
-                return _schema
-                    .getSchema(remote, table)
-                    .then(schema => perform_primary_scan(schema));
-            }
-
-            return _schema.validateSchemaSubset(remote, table, fields).then(r => {
-                if (!r) throw new Error('Invalid schema');
-                return perform_primary_scan(fields);
-            });
+            return f_field_args.then(perform_primary_scan);
 
         default:
             throw new Error(`Select type ${selectType} not supported`);
