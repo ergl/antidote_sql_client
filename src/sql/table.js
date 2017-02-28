@@ -126,8 +126,9 @@ function checkFK_Unsafe(remote, table, mapping) {
     return correlated.then(relation => {
         const valid_checks = relation.map(({ reference_table, field_name }) => {
             const range = mapping[field_name];
+            // FIXME: Change if FK can be against non-primary fields
             const f_select = select(remote, reference_table, field_name, {
-                primary: range
+                [field_name]: range
             });
 
             return f_select
@@ -258,26 +259,26 @@ function updateSingleUIndex(_, table, index, fk_value, field_names, field_values
 // another transaction (given that the current API doesn't allow nested transaction).
 // In that case, all operations will be executed in the current transaction.
 //
-function select(remote, table, fields, where) {
+function select(remote, table, fields, predicate) {
     return kv.runT(remote, function(tx) {
-        return select_Unsafe(tx, table, fields, where);
+        return select_Unsafe(tx, table, fields, predicate);
     });
 }
 
 // select_Unsafe(_, t, [f1, f2, ..., fn], predicate) will perform
 // SELECT f1, f2, ..., fn FROM t where predicate = true
 //
-// Supports predicates against primary key fields, restricted to the
-// form `pk = s` or `pk = x OR y ... OR z`. To do so, `where` should be
-// `{ primary: (key | [...keys]) }`.
+// The syntax for the predicate is
+// { field_a: (value | values), field_b: (value | values), ...}
 //
-// Should be called as follows
-// `select_Unsafe(_, _, _, { primary: key | [...keys] })`
-// This translates to SELECT [...] FROM TABLE WHERE key = X | key = X OR key = Y
+// This translates to
+// SELECT [...]
+//   FROM [...]
+//  WHERE
+//   field_a = value | field_a = value_1 OR value_2 OR ...
+//   [AND field_b = value | field_b = value_1 OR value_2 OR ...]
 //
-// To query against specific fields, use the following notation
-// `select_Unsafe(_, _, _, { field: { field_a: "foo", field_b: "bar" } })`
-// This will translate to SELECT [...] FROM TABLE WHERE field_a = "foo" AND field_b = "bar"
+// Currently we do not support OR between different fields (like A = B OR C = D).
 //
 // Supports for wildard select by calling `select_Unsafe(_, _, '*', _)`
 //
@@ -285,96 +286,89 @@ function select(remote, table, fields, where) {
 //
 // This function is unsafe. It MUST be ran inside a transaction.
 //
-// TODO: Support complex predicates
-// TODO: Change where to the following
-// We can use a mapping, like
-// { field_a: "value_a" | ["value_a", "value_b", field_b: () ... more fields }
-// each key in the map represents an AND (field_a = [] AND field_b = [] ...)
-// each value can be a simple value (X = Y), or an array, interpreted as
-// X = Y OR X = Z OR ...
-// Using this mapping, we can autodetect if a primary key is being used,
-// so we use scanPrimary instead of scanData
-// Caveats: Even if we detect an index (or unique index) on one of the queried
-// fields, we would need JOIN to support that.
 // FIXME: Revisit WHERE once JOINS are implemented
-function select_Unsafe(remote, table, field, where) {
-    const fields = utils.arreturn(field);
+// Detect indexed fields and scan the index instead.
+// We would need JOIN to support that.
+function select_Unsafe(remote, table, fields, predicate) {
+    const predicateFields = Object.keys(predicate);
+    const f_queriedFields = validateQueriedFields(remote, table, fields);
+    const f_predicateFields = validatePredicateFields(remote, table, predicateFields);
 
-    let f_field_args;
-    if (fields.length === 1 && fields[0] === '*') {
-        // If we query '*', get the entire schema
-        f_field_args = _schema.getSchema(remote, table);
-    } else {
-        f_field_args = _schema.validateSchemaSubset(remote, table, fields).then(r => {
-            if (!r) throw new Error('Invalid schema');
-            return fields;
+    return f_queriedFields.then(queriedFields => {
+        return f_predicateFields.then(predicateFields => {
+            const f_containsPk = containsPK(remote, table, predicateFields);
+
+            const f_rows = f_containsPk.then(({ contained, pkField }) => {
+                if (contained) {
+                    return scanFast(remote, table, predicate[pkField]);
+                }
+
+                // If the predicate fields don't contain a primary key, we have to
+                // perform a sequential scan of all the keys in the table.
+                // Ideally an index should exist on a field for fast scanning.
+                // TODO: scanIndex
+                return scanSequential(remote, table);
+            });
+
+            return f_rows.then(rows => {
+                // Filter only the rows that satisfy the predicate
+                const filtered = rows.filter(row => {
+                    const valid = predicateFields.map(field => {
+                        const matchValues = utils.arreturn(predicate[field]);
+                        return matchValues.includes(row[field]);
+                    });
+
+                    return valid.every(c => c === true);
+                });
+
+                // Extract only the queried fields
+                return filtered.map(row => {
+                    return utils.filterOKeys(row, key => queriedFields.includes(key));
+                });
+            });
         });
-    }
-
-    // FIXME: Improve 'where' representation (use a function?)
-    const whereKeys = Object.keys(where);
-    // TODO: Gross
-    assert(whereKeys.length === 1);
-
-    const selectType = whereKeys[0];
-    switch (selectType) {
-        // TODO: Gross
-        case 'primary':
-            const perform_primary_scan = lookup_fields => {
-                const pk_values = where[selectType];
-                // Grab all the field subkeys for every primary key given
-                // Read the values, convert to row object
-                const f_values = scanPrimary_T(remote, table, pk_values);
-                // Finally extract the values we want
-                return f_values.then(rows => {
-                    return rows.map(row => {
-                        return utils.filterOKeys(row, key => lookup_fields.includes(key));
-                    });
-                });
-            };
-
-            return f_field_args.then(perform_primary_scan);
-
-        case 'field':
-            const perform_data_scan = lookup_fields => {
-                const predicate_fields = where[selectType];
-                // Grab all the data keys from the table (parallel scan of
-                // all the table, really poor case), convert to row objects.
-                const f_values = scanData(remote, table);
-
-                return f_values.then(rows => {
-                    // then filter depending on predicate given.
-                    const filtered = rows.filter(row => {
-                        const valid = Object.keys(predicate_fields).map(k => {
-                            return row[k] === predicate_fields[k];
-                        });
-
-                        return valid.every(c => c === true);
-                    });
-
-                    // Finally extract the values we want.
-                    return filtered.map(row => {
-                        return utils.filterOKeys(row, key => lookup_fields.includes(key));
-                    });
-                });
-            };
-
-            return f_field_args.then(perform_data_scan);
-
-        default:
-            throw new Error(`Select type ${selectType} not supported`);
-    }
+    });
 }
 
-// See scanPrimary_Unsafe for details.
-//
-// This function will start a new transaction by default, unless called from inside
-// another transaction (given that the current API doesn't allow nested transaction).
-// In that case, all operations will be executed in the current transaction.
-//
-function scanPrimary_T(remote, table, pkRange) {
-    return kv.runT(remote, function(tx) {
-        return scanPrimary_Unsafe(tx, table, pkRange);
+function validateQueriedFields(remote, table, field) {
+    const queriedFields = utils.arreturn(field);
+    if (queriedFields.length === 1 && queriedFields[0] === '*') {
+        return _schema.getSchema(remote, table);
+    }
+
+    return _schema.validateSchemaSubset(remote, table, queriedFields).then(r => {
+        if (!r) {
+            throw new Error(`Invalid query fields ${queriedFields} on table ${table}`);
+        }
+
+        return queriedFields;
+    });
+}
+
+function validatePredicateFields(remote, table, field) {
+    const predicateFields = utils.arreturn(field);
+
+    return _schema.validateSchemaSubset(remote, table, predicateFields).then(r => {
+        if (!r) {
+            throw new Error(
+                `Invalid predicate fields ${predicateFields} on table ${table}`
+            );
+        }
+
+        return predicateFields;
+    });
+}
+
+// Given a list of fields, return if it contains a primary key
+// Return { contained : true, pkField : string } if found,
+// { contained : false } otherwise
+function containsPK(remote, table, fields) {
+    return pks.getPKField(remote, table).then(pkField => {
+        if (fields.includes(pkField)) {
+            return { contained: true, pkField };
+        }
+
+        return { contained: false };
     });
 }
 
@@ -391,7 +385,7 @@ function scanPrimary_T(remote, table, pkRange) {
 // fields, even if we only use a single result. Not trivial to know, however,
 // as selects that are part of joins might not now which fields are going to
 // be used as part of the join.
-function scanPrimary_Unsafe(remote, table, pkRange) {
+function scanFast(remote, table, pkRange) {
     const pkBatch = utils.arreturn(pkRange);
     const [pkStart, pkEnd] = pkBatch.length === 1 ? [pkBatch, pkBatch] : pkBatch;
 
@@ -443,7 +437,9 @@ function scanPrimary_Unsafe(remote, table, pkRange) {
         });
 }
 
-function scanData(remote, table) {
+// Slow scan through every data subkey of the table
+// (excluding indices and unique indices)
+function scanSequential(remote, table) {
     const f_schema = _schema.getSchema(remote, table);
 
     const rootKey = keyEncoding.table(table);
