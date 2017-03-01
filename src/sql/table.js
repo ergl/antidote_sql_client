@@ -112,7 +112,6 @@ function insertInto_Unsafe(remote, table, mapping) {
 //
 // This function is unsafe. It MUST be ran inside a transaction.
 //
-// TODO: Check infks as well
 function checkFK_Unsafe(remote, table, mapping) {
     const field_names = Object.keys(mapping);
     const correlated = fks.correlateFKs_T(remote, table, field_names);

@@ -49,7 +49,7 @@ function addIndex(remote, table_name, { index_name, field_names: field_name }) {
 // another transaction (given that the current API doesn't allow nested transaction).
 // In that case, all operations will be executed in the current transaction.
 //
-// TODO: Make indices retroactive
+// TODO: Make unique indices retroactive
 function addUniqueIndex(remote, table_name, { index_name, field_names: field_name }) {
     const runnable = tx => {
         const field_names = utils.arreturn(field_name);
