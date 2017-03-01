@@ -146,7 +146,7 @@ function checkFK_Unsafe(remote, table, mapping) {
         });
 
         return Promise.all(valid_checks).then(all_checks => {
-            return all_checks.every(e => e === true);
+            return all_checks.every(Boolean);
         });
     });
 }
@@ -208,7 +208,7 @@ function select_Unsafe(remote, table, fields, predicate) {
                             return matchValues.includes(row[field]);
                         });
 
-                        return valid.every(c => c === true);
+                        return valid.every(Boolean);
                     });
 
                     // Extract only the queried fields
