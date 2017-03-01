@@ -6,7 +6,7 @@ const scan = require('./scan');
 const kv = require('../db/kv');
 const pks = require('./meta/pks');
 const fks = require('./meta/fks');
-const _schema = require('./meta/schema');
+const schema = require('./meta/schema');
 const indices = require('./meta/indices');
 const keyEncoding = require('../db/keyEncoding');
 const tableMetadata = require('./tableMetadata');
@@ -64,11 +64,11 @@ function insertInto_Unsafe(remote, table, mapping) {
             const field_names = Object.keys(mapping);
             return field_names.concat(pk_field);
         })
-        .then(schema => {
+        .then(insertFields => {
             // Inserts must specify every field, don't allow nulls by default
             // Easily solvable by inserting a bottom value.
             // TODO: Add bottom value for nullable fields
-            return _schema.validateSchema(remote, table, schema).then(r => {
+            return schema.validateSchema(remote, table, insertFields).then(r => {
                 if (!r) throw new Error('Invalid schema');
                 return checkFK_Unsafe(remote, table, mapping);
             });
@@ -223,10 +223,10 @@ function select_Unsafe(remote, table, fields, predicate) {
 function validateQueriedFields(remote, table, field) {
     const queriedFields = utils.arreturn(field);
     if (queriedFields.length === 1 && queriedFields[0] === '*') {
-        return _schema.getSchema(remote, table);
+        return schema.getSchema(remote, table);
     }
 
-    return _schema.validateSchemaSubset(remote, table, queriedFields).then(r => {
+    return schema.validateSchemaSubset(remote, table, queriedFields).then(r => {
         if (!r) {
             throw new Error(`Invalid query fields ${queriedFields} on table ${table}`);
         }
@@ -238,7 +238,7 @@ function validateQueriedFields(remote, table, field) {
 function validatePredicateFields(remote, table, field) {
     const predicateFields = utils.arreturn(field);
 
-    return _schema.validateSchemaSubset(remote, table, predicateFields).then(r => {
+    return schema.validateSchemaSubset(remote, table, predicateFields).then(r => {
         if (!r) {
             throw new Error(
                 `Invalid predicate fields ${predicateFields} on table ${table}`
