@@ -56,7 +56,21 @@ function incrKey(remote, table_name) {
     });
 }
 
+// Given a list of fields, return if it contains a primary key
+// Return { contained : true, pkField : string } if found,
+// { contained : false } otherwise
+function containsPK(remote, table, fields) {
+    return getPKField(remote, table).then(pkField => {
+        if (fields.includes(pkField)) {
+            return { contained: true, pkField };
+        }
+
+        return { contained: false };
+    });
+}
+
 module.exports = {
+    containsPK,
     getPKField,
     getCurrentKey,
     fetchAddPrimaryKey_T

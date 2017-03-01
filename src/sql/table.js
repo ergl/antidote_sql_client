@@ -193,7 +193,7 @@ function select_Unsafe(remote, table, fields, predicate) {
 
     return f_queriedFields.then(queriedFields => {
         return f_predicateFields.then(predicateFields => {
-            const f_containsPk = containsPK(remote, table, predicateFields);
+            const f_containsPk = pks.containsPK(remote, table, predicateFields);
 
             const f_rows = f_containsPk.then(({ contained, pkField }) => {
                 if (contained) {
@@ -253,19 +253,6 @@ function validatePredicateFields(remote, table, field) {
         }
 
         return predicateFields;
-    });
-}
-
-// Given a list of fields, return if it contains a primary key
-// Return { contained : true, pkField : string } if found,
-// { contained : false } otherwise
-function containsPK(remote, table, fields) {
-    return pks.getPKField(remote, table).then(pkField => {
-        if (fields.includes(pkField)) {
-            return { contained: true, pkField };
-        }
-
-        return { contained: false };
     });
 }
 
