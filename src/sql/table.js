@@ -30,7 +30,7 @@ function create(remote, name, schema) {
 // another transaction (given that the current API doesn't allow nested transaction).
 // In that case, all operations will be executed in the current transaction.
 //
-function insertInto_T(remote, name, mapping) {
+function insertInto(remote, name, mapping) {
     return kv.runT(remote, function(tx) {
         return insertInto_Unsafe(tx, name, mapping);
     });
@@ -260,5 +260,5 @@ function validatePredicateFields(remote, table, field) {
 module.exports = {
     create,
     select,
-    insertInto_T
+    insertInto
 };
