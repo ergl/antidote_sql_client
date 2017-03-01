@@ -194,36 +194,28 @@ function select_Unsafe(remote, table, fields, predicate) {
 
     return f_queriedFields.then(queriedFields => {
         return f_predicateFields.then(predicateFields => {
-            const f_containsPk = pks.containsPK(remote, table, predicateFields);
+            const f_scanFn = scan.selectScanFn(remote, table, predicateFields);
 
-            const f_rows = f_containsPk.then(({ contained, pkField }) => {
-                if (contained) {
-                    return scan.scanFast(remote, table, predicate[pkField]);
-                }
+            return f_scanFn
+                .then(scanFn => {
+                    return scanFn(remote, table, predicate);
+                })
+                .then(rows => {
+                    // Filter only the rows that satisfy the predicate
+                    const filtered = rows.filter(row => {
+                        const valid = predicateFields.map(field => {
+                            const matchValues = utils.arreturn(predicate[field]);
+                            return matchValues.includes(row[field]);
+                        });
 
-                // If the predicate fields don't contain a primary key, we have to
-                // perform a sequential scan of all the keys in the table.
-                // Ideally an index should exist on a field for fast scanning.
-                // TODO: scanIndex
-                return scan.scanSequential(remote, table);
-            });
-
-            return f_rows.then(rows => {
-                // Filter only the rows that satisfy the predicate
-                const filtered = rows.filter(row => {
-                    const valid = predicateFields.map(field => {
-                        const matchValues = utils.arreturn(predicate[field]);
-                        return matchValues.includes(row[field]);
+                        return valid.every(c => c === true);
                     });
 
-                    return valid.every(c => c === true);
+                    // Extract only the queried fields
+                    return filtered.map(row => {
+                        return utils.filterOKeys(row, key => queriedFields.includes(key));
+                    });
                 });
-
-                // Extract only the queried fields
-                return filtered.map(row => {
-                    return utils.filterOKeys(row, key => queriedFields.includes(key));
-                });
-            });
         });
     });
 }

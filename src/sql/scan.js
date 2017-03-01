@@ -5,6 +5,37 @@ const pks = require('./meta/pks');
 const schema = require('./meta/schema');
 const keyEncoding = require('../db/keyEncoding');
 
+// Given a table name, and a list of fields that make up the predicate
+// of a query, select the most appropiate scan function.
+// Depending on the fields being selected, it will use either primary (fast)
+// or sequential (slow) scan functions.
+//
+// Returns a function that should be called with a remote, a table name, and the
+// complete predicate object.
+//
+// This function is unsafe. It MUST be ran inside a transaction.
+//
+// TODO: Add selections for index scans
+function selectScanFn(remote, table, predicateFields) {
+    const f_containsPk = pks.containsPK(remote, table, predicateFields);
+
+    return f_containsPk.then(({ contained, pkField }) => {
+        if (contained) {
+            return function(remote, table, predicate) {
+                return scanFast(remote, table, predicate[pkField]);
+            };
+        }
+
+        // If the predicate fields don't contain a primary key, we have to
+        // perform a sequential scan of all the keys in the table.
+        // Ideally an index should exist on a field for fast scanning.
+        // TODO: scanIndex
+        return function(remote, table, _) {
+            return scanSequential(remote, table);
+        };
+    });
+}
+
 // Given a table name, and a range of primary keys (in the form of [start, end]),
 // will fetch the appropiate subkey batch and get all the values from those.
 // Only supports selects against primary keys.
@@ -124,6 +155,5 @@ function toRowExt(row, field_names) {
 }
 
 module.exports = {
-    scanFast,
-    scanSequential
+    selectScanFn
 };
