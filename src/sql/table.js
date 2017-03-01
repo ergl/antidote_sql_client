@@ -2,10 +2,11 @@ const assert = require('assert');
 
 const utils = require('../utils');
 
+const scan = require('./scan');
 const kv = require('../db/kv');
 const pks = require('./meta/pks');
 const fks = require('./meta/fks');
-const _schema = require('./meta/schema');
+const schema = require('./meta/schema');
 const indices = require('./meta/indices');
 const keyEncoding = require('../db/keyEncoding');
 const tableMetadata = require('./tableMetadata');
@@ -29,7 +30,7 @@ function create(remote, name, schema) {
 // another transaction (given that the current API doesn't allow nested transaction).
 // In that case, all operations will be executed in the current transaction.
 //
-function insertInto_T(remote, name, mapping) {
+function insertInto(remote, name, mapping) {
     return kv.runT(remote, function(tx) {
         return insertInto_Unsafe(tx, name, mapping);
     });
@@ -63,11 +64,11 @@ function insertInto_Unsafe(remote, table, mapping) {
             const field_names = Object.keys(mapping);
             return field_names.concat(pk_field);
         })
-        .then(schema => {
+        .then(insertFields => {
             // Inserts must specify every field, don't allow nulls by default
             // Easily solvable by inserting a bottom value.
             // TODO: Add bottom value for nullable fields
-            return _schema.validateSchema(remote, table, schema).then(r => {
+            return schema.validateSchema(remote, table, insertFields).then(r => {
                 if (!r) throw new Error('Invalid schema');
                 return checkFK_Unsafe(remote, table, mapping);
             });
@@ -90,10 +91,10 @@ function insertInto_Unsafe(remote, table, mapping) {
             return kv
                 .put(remote, keys, values)
                 .then(_ => {
-                    return updateIndices(remote, table, pk_value, mapping);
+                    return indices.updateIndices(remote, table, pk_value, mapping);
                 })
                 .then(_ => {
-                    return updateUIndices(remote, table, pk_value, mapping);
+                    return indices.updateUIndices(remote, table, pk_value, mapping);
                 });
         });
 }
@@ -111,7 +112,6 @@ function insertInto_Unsafe(remote, table, mapping) {
 //
 // This function is unsafe. It MUST be ran inside a transaction.
 //
-// TODO: Check infks as well
 function checkFK_Unsafe(remote, table, mapping) {
     const field_names = Object.keys(mapping);
     const correlated = fks.correlateFKs_T(remote, table, field_names);
@@ -145,112 +145,9 @@ function checkFK_Unsafe(remote, table, mapping) {
         });
 
         return Promise.all(valid_checks).then(all_checks => {
-            return all_checks.every(e => e === true);
+            return all_checks.every(Boolean);
         });
     });
-}
-
-function updateIndices(remote, table, fk_value, mapping) {
-    const field_names = Object.keys(mapping);
-    const correlated = indices.correlateIndices(remote, table, field_names);
-
-    return correlated.then(relation => {
-        const ops = relation.reduce(
-            (acc, { index_name, field_names }) => {
-                // FIXME: field f might not be in the mapping
-                const field_values = field_names.map(f => mapping[f]);
-                const pr = updateSingleIndex(
-                    remote,
-                    table,
-                    index_name,
-                    fk_value,
-                    field_names,
-                    field_values
-                );
-                return Promise.all([acc, pr]).then(res => {
-                    const [acc, { keys, values }] = res;
-                    return {
-                        keys: acc.keys.concat(keys),
-                        values: acc.values.concat(values)
-                    };
-                });
-            },
-            Promise.resolve({ keys: [], values: [] })
-        );
-
-        return ops.then(({ keys, values }) => {
-            return kv.put(remote, keys, values);
-        });
-    });
-}
-
-function updateUIndices(remote, table, fk_value, mapping) {
-    const field_names = Object.keys(mapping);
-    const correlated = indices.correlateUniqueIndices(remote, table, field_names);
-
-    return correlated.then(relation => {
-        const ops = relation.reduce(
-            (acc, { index_name, field_names }) => {
-                // FIXME: field f might not be in the mapping
-                const field_values = field_names.map(f => mapping[f]);
-                const pr = updateSingleUIndex(
-                    remote,
-                    table,
-                    index_name,
-                    fk_value,
-                    field_names,
-                    field_values
-                );
-                return Promise.all([acc, pr]).then(res => {
-                    const [acc, { keys, values }] = res;
-                    return {
-                        keys: acc.keys.concat(keys),
-                        values: acc.values.concat(values),
-                        expected: acc.expected.concat(fk_value)
-                    };
-                });
-            },
-            Promise.resolve({ keys: [], values: [], expected: [] })
-        );
-
-        return ops.then(({ keys, values, expected }) => {
-            // TODO: Tag condPut error
-            // guarantee that the returned error is an uniqueness violation
-            return kv.condPut(remote, keys, values, expected).catch(e => {
-                console.log(e);
-                throw new Error(`Uniqueness guarantee violation on ${table}`);
-            });
-        });
-    });
-}
-
-// FIXME: Generate super keys
-// When adding to the kset, we should auto-insert the appropiate super keys to support
-// subkey range scans. (Or maybe `subkeys` should be smarter thant that and derive the
-// appropiate scan.
-function updateSingleIndex(_, table, index, fk_value, field_names, field_values) {
-    const index_keys = field_names.map((fld_name, i) => {
-        return keyEncoding.index_key(table, index, fld_name, field_values[i], fk_value);
-    });
-
-    // TODO: If bottom value is defined, use it for these keys
-    // Just sentinel keys, should add them to the kset instead
-    const index_values = field_names.map(_ => undefined);
-
-    return { keys: index_keys, values: index_values };
-}
-
-// FIXME: Generate super keys
-// When adding to the kset, we should auto-insert the appropiate super keys to support
-// subkey range scans. (Or maybe `subkeys` should be smarter thant that and derive the
-// appropiate scan.
-function updateSingleUIndex(_, table, index, fk_value, field_names, field_values) {
-    const uindex_keys = field_names.map((fld_name, i) => {
-        return keyEncoding.uindex_key(table, index, fld_name, field_values[i]);
-    });
-
-    const uindex_values = field_names.map(_ => fk_value);
-    return { keys: uindex_keys, values: uindex_values };
 }
 
 // See select_Unsafe for details.
@@ -296,36 +193,28 @@ function select_Unsafe(remote, table, fields, predicate) {
 
     return f_queriedFields.then(queriedFields => {
         return f_predicateFields.then(predicateFields => {
-            const f_containsPk = containsPK(remote, table, predicateFields);
+            const f_scanFn = scan.selectScanFn(remote, table, predicateFields);
 
-            const f_rows = f_containsPk.then(({ contained, pkField }) => {
-                if (contained) {
-                    return scanFast(remote, table, predicate[pkField]);
-                }
+            return f_scanFn
+                .then(scanFn => {
+                    return scanFn(remote, table, predicate);
+                })
+                .then(rows => {
+                    // Filter only the rows that satisfy the predicate
+                    const filtered = rows.filter(row => {
+                        const valid = predicateFields.map(field => {
+                            const matchValues = utils.arreturn(predicate[field]);
+                            return matchValues.includes(row[field]);
+                        });
 
-                // If the predicate fields don't contain a primary key, we have to
-                // perform a sequential scan of all the keys in the table.
-                // Ideally an index should exist on a field for fast scanning.
-                // TODO: scanIndex
-                return scanSequential(remote, table);
-            });
-
-            return f_rows.then(rows => {
-                // Filter only the rows that satisfy the predicate
-                const filtered = rows.filter(row => {
-                    const valid = predicateFields.map(field => {
-                        const matchValues = utils.arreturn(predicate[field]);
-                        return matchValues.includes(row[field]);
+                        return valid.every(Boolean);
                     });
 
-                    return valid.every(c => c === true);
+                    // Extract only the queried fields
+                    return filtered.map(row => {
+                        return utils.filterOKeys(row, key => queriedFields.includes(key));
+                    });
                 });
-
-                // Extract only the queried fields
-                return filtered.map(row => {
-                    return utils.filterOKeys(row, key => queriedFields.includes(key));
-                });
-            });
         });
     });
 }
@@ -333,10 +222,10 @@ function select_Unsafe(remote, table, fields, predicate) {
 function validateQueriedFields(remote, table, field) {
     const queriedFields = utils.arreturn(field);
     if (queriedFields.length === 1 && queriedFields[0] === '*') {
-        return _schema.getSchema(remote, table);
+        return schema.getSchema(remote, table);
     }
 
-    return _schema.validateSchemaSubset(remote, table, queriedFields).then(r => {
+    return schema.validateSchemaSubset(remote, table, queriedFields).then(r => {
         if (!r) {
             throw new Error(`Invalid query fields ${queriedFields} on table ${table}`);
         }
@@ -348,7 +237,7 @@ function validateQueriedFields(remote, table, field) {
 function validatePredicateFields(remote, table, field) {
     const predicateFields = utils.arreturn(field);
 
-    return _schema.validateSchemaSubset(remote, table, predicateFields).then(r => {
+    return schema.validateSchemaSubset(remote, table, predicateFields).then(r => {
         if (!r) {
             throw new Error(
                 `Invalid predicate fields ${predicateFields} on table ${table}`
@@ -359,139 +248,8 @@ function validatePredicateFields(remote, table, field) {
     });
 }
 
-// Given a list of fields, return if it contains a primary key
-// Return { contained : true, pkField : string } if found,
-// { contained : false } otherwise
-function containsPK(remote, table, fields) {
-    return pks.getPKField(remote, table).then(pkField => {
-        if (fields.includes(pkField)) {
-            return { contained: true, pkField };
-        }
-
-        return { contained: false };
-    });
-}
-
-// Given a table name, and a range of primary keys (in the form of [start, end]),
-// will fetch the appropiate subkey batch and get all the values from those.
-// Only supports selects against primary keys.
-//
-// Will fail if the scan goes out of bounds of max(table.pk_value)
-//
-// This function is unsafe. It MUST be ran inside a transaction.
-//
-// FIXME: Fetch only appropiate keys
-// Right now the scan is too eager, as it fetches the keys for all the
-// fields, even if we only use a single result. Not trivial to know, however,
-// as selects that are part of joins might not now which fields are going to
-// be used as part of the join.
-function scanFast(remote, table, pkRange) {
-    const pkBatch = utils.arreturn(pkRange);
-    const [pkStart, pkEnd] = pkBatch.length === 1 ? [pkBatch, pkBatch] : pkBatch;
-
-    // Assumes keys are numeric
-    // Only useful for primary keys
-    //
-    // FIXME: Change if using user-defined primary keys
-    // In that case, should look in the appropiate unique index
-    const f_validRange = pks.getCurrentKey(remote, table).then(max => {
-        return pkEnd <= max;
-    });
-
-    return f_validRange
-        .then(validRange => {
-            if (!validRange) {
-                throw new Error(
-                    `scanPrimary of key ${pkEnd} on ${table} is out of valid range`
-                );
-            }
-
-            return _schema.getSchema(remote, table);
-        })
-        .then(schema => {
-            // If called with just one key, like scan(A, A),
-            // fetch subkeys(A) instead
-            if (pkBatch.length === 1) {
-                const [pkStart] = pkBatch;
-                const key = keyEncoding.spk(table, pkStart);
-                const keyBatch = kv.subkeyBatch(remote, key);
-                return kv.get(remote, keyBatch).then(r => {
-                    return [toRow(r, schema)];
-                });
-            }
-
-            const [startKey, endKey] = [
-                keyEncoding.spk(table, pkStart),
-                keyEncoding.spk(table, pkEnd)
-            ];
-
-            // Given that we're interested in the subkeys of the primary key,
-            // we combine batch(A,B) + strictSubkeys(B)
-            const firstBatch = kv.keyBatch(remote, startKey, endKey);
-            const subkeyBatch = kv.strictSubkeyBatch(remote, endKey);
-            const keyBatch = firstBatch.concat(subkeyBatch);
-
-            return kv.get(remote, keyBatch).then(results => {
-                return toRowExt(results, schema);
-            });
-        });
-}
-
-// Slow scan through every data subkey of the table
-// (excluding indices and unique indices)
-function scanSequential(remote, table) {
-    const f_schema = _schema.getSchema(remote, table);
-
-    const rootKey = keyEncoding.table(table);
-    const keys = kv.subkeyBatch(remote, rootKey).filter(keyEncoding.isData);
-    return kv.get(remote, keys).then(values => {
-        return f_schema.then(schema => {
-            return toRowExt(values, schema);
-        });
-    });
-}
-
-// Given a list of results from a scan, and a list of field names,
-// build an object { field: value }.
-//
-// Assumes length(row) = length(field_names)
-function toRow(row, field_names) {
-    return row.reduce(
-        (acc, curr, ix) => {
-            return Object.assign(acc, { [field_names[ix]]: curr });
-        },
-        {}
-    );
-}
-
-// Given a list of results from a scan, and a list of field names,
-// build an object { field: value }.
-//
-// If length(row) > length(field_names), it will build multiple rows.
-// Assumes length(row) = N * length(field_names)
-// For example:
-// toRowExt([1,2,3,1,2,3], ['foo','bar','baz'])
-// => [ { foo: 1, bar: 2, baz: 3 }, { foo: 1, bar: 2, baz: 3 } ]
-function toRowExt(row, field_names) {
-    const res = [];
-
-    let vi = 0;
-    while (vi < row.length) {
-        const obj = field_names.reduce(
-            (acc, f, ix) => {
-                return Object.assign(acc, { [f]: row[ix + vi] });
-            },
-            {}
-        );
-        res.push(obj);
-        vi = vi + field_names.length;
-    }
-
-    return res;
-}
-
 module.exports = {
     create,
     select,
-    insertInto_T
+    insertInto
 };
