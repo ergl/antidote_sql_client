@@ -90,10 +90,10 @@ function insertInto_Unsafe(remote, table, mapping) {
             return kv
                 .put(remote, keys, values)
                 .then(_ => {
-                    return updateIndices(remote, table, pk_value, mapping);
+                    return indices.updateIndices(remote, table, pk_value, mapping);
                 })
                 .then(_ => {
-                    return updateUIndices(remote, table, pk_value, mapping);
+                    return indices.updateUIndices(remote, table, pk_value, mapping);
                 });
         });
 }
@@ -148,109 +148,6 @@ function checkFK_Unsafe(remote, table, mapping) {
             return all_checks.every(e => e === true);
         });
     });
-}
-
-function updateIndices(remote, table, fk_value, mapping) {
-    const field_names = Object.keys(mapping);
-    const correlated = indices.correlateIndices(remote, table, field_names);
-
-    return correlated.then(relation => {
-        const ops = relation.reduce(
-            (acc, { index_name, field_names }) => {
-                // FIXME: field f might not be in the mapping
-                const field_values = field_names.map(f => mapping[f]);
-                const pr = updateSingleIndex(
-                    remote,
-                    table,
-                    index_name,
-                    fk_value,
-                    field_names,
-                    field_values
-                );
-                return Promise.all([acc, pr]).then(res => {
-                    const [acc, { keys, values }] = res;
-                    return {
-                        keys: acc.keys.concat(keys),
-                        values: acc.values.concat(values)
-                    };
-                });
-            },
-            Promise.resolve({ keys: [], values: [] })
-        );
-
-        return ops.then(({ keys, values }) => {
-            return kv.put(remote, keys, values);
-        });
-    });
-}
-
-function updateUIndices(remote, table, fk_value, mapping) {
-    const field_names = Object.keys(mapping);
-    const correlated = indices.correlateUniqueIndices(remote, table, field_names);
-
-    return correlated.then(relation => {
-        const ops = relation.reduce(
-            (acc, { index_name, field_names }) => {
-                // FIXME: field f might not be in the mapping
-                const field_values = field_names.map(f => mapping[f]);
-                const pr = updateSingleUIndex(
-                    remote,
-                    table,
-                    index_name,
-                    fk_value,
-                    field_names,
-                    field_values
-                );
-                return Promise.all([acc, pr]).then(res => {
-                    const [acc, { keys, values }] = res;
-                    return {
-                        keys: acc.keys.concat(keys),
-                        values: acc.values.concat(values),
-                        expected: acc.expected.concat(fk_value)
-                    };
-                });
-            },
-            Promise.resolve({ keys: [], values: [], expected: [] })
-        );
-
-        return ops.then(({ keys, values, expected }) => {
-            // TODO: Tag condPut error
-            // guarantee that the returned error is an uniqueness violation
-            return kv.condPut(remote, keys, values, expected).catch(e => {
-                console.log(e);
-                throw new Error(`Uniqueness guarantee violation on ${table}`);
-            });
-        });
-    });
-}
-
-// FIXME: Generate super keys
-// When adding to the kset, we should auto-insert the appropiate super keys to support
-// subkey range scans. (Or maybe `subkeys` should be smarter thant that and derive the
-// appropiate scan.
-function updateSingleIndex(_, table, index, fk_value, field_names, field_values) {
-    const index_keys = field_names.map((fld_name, i) => {
-        return keyEncoding.index_key(table, index, fld_name, field_values[i], fk_value);
-    });
-
-    // TODO: If bottom value is defined, use it for these keys
-    // Just sentinel keys, should add them to the kset instead
-    const index_values = field_names.map(_ => undefined);
-
-    return { keys: index_keys, values: index_values };
-}
-
-// FIXME: Generate super keys
-// When adding to the kset, we should auto-insert the appropiate super keys to support
-// subkey range scans. (Or maybe `subkeys` should be smarter thant that and derive the
-// appropiate scan.
-function updateSingleUIndex(_, table, index, fk_value, field_names, field_values) {
-    const uindex_keys = field_names.map((fld_name, i) => {
-        return keyEncoding.uindex_key(table, index, fld_name, field_values[i]);
-    });
-
-    const uindex_values = field_names.map(_ => fk_value);
-    return { keys: uindex_keys, values: uindex_values };
 }
 
 // See select_Unsafe for details.
