@@ -346,10 +346,7 @@ function updateUIndices(remote, table, fk_value, mapping) {
     });
 }
 
-// FIXME: Generate super keys
-// When adding to the kset, we should auto-insert the appropiate super keys to support
-// subkey range scans. (Or maybe `subkeys` should be smarter thant that and derive the
-// appropiate scan.
+// TODO: Generate super keys if we want sequential scans over unique indices
 function updateSingleUIndex(table, index, fk_value, field_names, field_values) {
     const uindex_keys = field_names.map((fld_name, i) => {
         return keyEncoding.uindex_key(table, index, fld_name, field_values[i]);
