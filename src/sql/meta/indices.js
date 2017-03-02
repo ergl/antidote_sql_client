@@ -263,31 +263,28 @@ function updateIndices(remote, table, fk_value, mapping) {
     const correlated = correlateIndices(remote, table, field_names);
 
     return correlated.then(relation => {
-        const ops = relation.reduce(
+        const indexMapping = relation.reduce(
             (acc, { index_name, field_names }) => {
                 // FIXME: field f might not be in the mapping
                 const field_values = field_names.map(f => mapping[f]);
-                const pr = updateSingleIndex(
+                const { keys, values } = updateSingleIndex(
                     table,
                     index_name,
                     fk_value,
                     field_names,
                     field_values
                 );
-                return Promise.all([acc, pr]).then(res => {
-                    const [acc, { keys, values }] = res;
-                    return {
-                        keys: acc.keys.concat(keys),
-                        values: acc.values.concat(values)
-                    };
-                });
+
+                return {
+                    keys: acc.keys.concat(keys),
+                    values: acc.values.concat(values)
+                };
             },
-            Promise.resolve({ keys: [], values: [] })
+            { keys: [], values: [] }
         );
 
-        return ops.then(({ keys, values }) => {
-            return kv.put(remote, keys, values);
-        });
+        const { keys, values } = indexMapping;
+        return kv.put(remote, keys, values);
     });
 }
 
@@ -312,36 +309,34 @@ function updateUIndices(remote, table, fk_value, mapping) {
     const correlated = correlateUniqueIndices(remote, table, field_names);
 
     return correlated.then(relation => {
-        const ops = relation.reduce(
+        const uIndexMapping = relation.reduce(
             (acc, { index_name, field_names }) => {
                 // FIXME: field f might not be in the mapping
                 const field_values = field_names.map(f => mapping[f]);
-                const pr = updateSingleUIndex(
+                const { keys, values } = updateSingleUIndex(
                     table,
                     index_name,
                     fk_value,
                     field_names,
                     field_values
                 );
-                return Promise.all([acc, pr]).then(res => {
-                    const [acc, { keys, values }] = res;
-                    return {
-                        keys: acc.keys.concat(keys),
-                        values: acc.values.concat(values),
-                        expected: acc.expected.concat(fk_value)
-                    };
-                });
+
+                return {
+                    keys: acc.keys.concat(keys),
+                    values: acc.values.concat(values),
+                    expected: acc.expected.concat(fk_value)
+                };
             },
-            Promise.resolve({ keys: [], values: [], expected: [] })
+            { keys: [], values: [], expected: [] }
         );
 
-        return ops.then(({ keys, values, expected }) => {
-            // TODO: Tag condPut error
-            // guarantee that the returned error is an uniqueness violation
-            return kv.condPut(remote, keys, values, expected).catch(e => {
-                console.log(e);
-                throw new Error(`Uniqueness guarantee violation on ${table}`);
-            });
+        const { keys, values, expected } = uIndexMapping;
+
+        // TODO: Tag condPut error
+        // guarantee that the returned error is an uniqueness violation
+        return kv.condPut(remote, keys, values, expected).catch(e => {
+            console.log(e);
+            throw new Error(`Uniqueness guarantee violation on ${table}`);
         });
     });
 }
