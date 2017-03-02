@@ -135,6 +135,28 @@ function scanIndex(remote, table, index, field, value) {
     return fetchBatch(remote, table, pkKeys);
 }
 
+// Given a table, the name of an unique index, the name of a field indexed by it,
+// and an expected value (predicate), fetch the corresponding primary key,
+// and then fetch the appropiate table where this field exists with that value.
+// This scan should be faster than both scanFast and scanSequential.
+//
+// TODO: Return early if query only wanted primary key values
+// If the query was SELECT id FROM [...] WHERE indexedField = "foo"
+// this scan will be used, but after getting the id, they will be followed
+// and the entire table will be fetched. Then a filter will happen, extracting
+// only the id. If we know that only the id is used, we only need a single roundtrip
+// instead of two.
+//
+// TODO: Deal with values that don't exist
+function scanUIndex(remote, table, index, field, value) {
+    const matchKey = keyEncoding.uindex_key(table, index, field, value);
+    const f_pkValue = kv.get(remote, matchKey);
+
+    return f_pkValue.then(pkValue => {
+        return fetchBatch(remote, table, pkValue);
+    });
+}
+
 function fetchBatch(remote, table, pkValue) {
     const pkValues = utils.arreturn(pkValue);
     const pks = pkValues.map(k => keyEncoding.spk(table, k));
