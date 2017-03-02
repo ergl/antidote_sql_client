@@ -22,6 +22,10 @@ function wrap_index_key(t, i, f, v, k) {
     return { key: kset.index_key(t, i, f, kset.d_string(v), kset.d_int(k)) };
 }
 
+function wrap_raw_index_field_value(t, i, f, v) {
+    return { key: kset.raw_index_field_value(t, i, f, kset.d_string(v)) };
+}
+
 function wrap_uindex_key(t, i, f, v) {
     return { key: kset.uindex_key(t, i, f, kset.d_string(v)) };
 }
@@ -57,5 +61,6 @@ module.exports = {
     isIndex: wrap_is_index,
     isUIndex: wrap_is_uindex,
     fieldFromKey: wrap_field_from_key,
-    toString: wrap_string
+    toString: wrap_string,
+    raw_index_field_value: wrap_raw_index_field_value
 };

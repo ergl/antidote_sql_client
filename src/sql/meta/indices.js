@@ -288,20 +288,23 @@ function updateIndices(remote, table, fk_value, mapping) {
     });
 }
 
-// FIXME: Generate super keys
-// When adding to the kset, we should auto-insert the appropiate super keys to support
-// subkey range scans. (Or maybe `subkeys` should be smarter thant that and derive the
-// appropiate scan.
 function updateSingleIndex(table, index, fk_value, field_names, field_values) {
-    const index_keys = field_names.map((fld_name, i) => {
-        return keyEncoding.index_key(table, index, fld_name, field_values[i], fk_value);
+    const nested_index_keys = field_names.map((fld_name, i) => {
+        const fieldValue = field_values[i];
+        return [
+            // Sentinel super key for scans
+            keyEncoding.raw_index_field_value(table, index, fld_name, fieldValue),
+            keyEncoding.index_key(table, index, fld_name, fieldValue, fk_value)
+        ];
     });
+
+    const indexKeys = utils.flatten(nested_index_keys);
 
     // TODO: If bottom value is defined, use it for these keys
     // Just sentinel keys, should add them to the kset instead
-    const index_values = field_names.map(_ => undefined);
+    const indexValues = indexKeys.map(_ => undefined);
 
-    return { keys: index_keys, values: index_values };
+    return { keys: indexKeys, values: indexValues };
 }
 
 function updateUIndices(remote, table, fk_value, mapping) {
