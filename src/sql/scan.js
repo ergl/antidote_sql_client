@@ -131,8 +131,8 @@ function scanSequential(remote, table) {
 function scanIndex(remote, table, index, field, value) {
     const matchKey = keyEncoding.raw_index_field_value(table, index, field, value);
     const matchedKeys = kv.strictSubkeyBatch(remote, matchKey);
-    const pkKeys = matchedKeys.map(key => keyEncoding.getIndexData(key));
-    return fetchBatch(remote, table, pkKeys);
+    const pkValues = matchedKeys.map(key => keyEncoding.getIndexData(key));
+    return fetchBatch(remote, table, pkValues);
 }
 
 // Given a table, the name of an unique index, the name of a field indexed by it,
