@@ -119,7 +119,8 @@ function scanSequential(remote, table) {
 // build an object { field: value }.
 //
 // Assumes length(row) = length(field_names)
-function toRow(row, field_names) {
+function toRow(map, field_names) {
+    const row = utils.arreturn(map);
     return row.reduce(
         (acc, curr, ix) => {
             return Object.assign(acc, { [field_names[ix]]: curr });
@@ -136,7 +137,8 @@ function toRow(row, field_names) {
 // For example:
 // toRowExt([1,2,3,1,2,3], ['foo','bar','baz'])
 // => [ { foo: 1, bar: 2, baz: 3 }, { foo: 1, bar: 2, baz: 3 } ]
-function toRowExt(row, field_names) {
+function toRowExt(map, field_names) {
+    const row = utils.arreturn(map);
     const res = [];
 
     let vi = 0;
