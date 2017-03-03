@@ -78,25 +78,31 @@ function insertInto_Unsafe(remote, table, mapping) {
             return pks.fetchAddPrimaryKey_T(remote, table);
         })
         .then(pk_value => {
-            const field_names = Object.keys(mapping);
-            const pk_key = keyEncoding.spk(table, pk_value);
-            const field_keys = field_names.map(f => {
-                return keyEncoding.field(table, pk_value, f);
-            });
-            const field_values = field_names.map(f => mapping[f]);
-
-            const keys = field_keys.concat(pk_key);
-            const values = field_values.concat(pk_value);
-
-            return kv
-                .put(remote, keys, values)
-                .then(_ => {
-                    return indices.updateIndices(remote, table, pk_value, mapping);
-                })
-                .then(_ => {
-                    return indices.updateUIndices(remote, table, pk_value, mapping);
-                });
+            return rawInsert_Unsafe(remote, table, pk_value, mapping);
         });
+}
+
+// Given a table, a primary key value, and a map of field names to field values
+// (excluding the primary key), insert them into the database. This function will
+// not check the validity of the primary key value, or that the fields are part of
+// the table schema. However, this function will update all the related indices that
+// are associated with this table, if any of the inserted fields is being indexed.
+//
+// This function is unsafe. It MUST be ran inside a transaction.
+//
+function rawInsert_Unsafe(remote, table, pkValue, mapping) {
+    const fieldNames = Object.keys(mapping);
+    const pkKey = keyEncoding.spk(table, pkValue);
+    const fieldKeys = fieldNames.map(f => keyEncoding.field(table, pkValue, f));
+    const fieldValues = fieldNames.map(f => mapping[f]);
+
+    const keys = [pkKey, ...fieldKeys];
+    const values = [pkValue, ...fieldValues];
+
+    return kv
+        .put(remote, keys, values)
+        .then(_ => indices.updateIndices(remote, table, pkValue, mapping))
+        .then(_ => indices.updateUIndices(remote, table, pkValue, mapping));
 }
 
 // Given a table, and a map of updated field names to their values,
