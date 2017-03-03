@@ -193,35 +193,59 @@ function select(remote, table, fields, predicate) {
 // Detect indexed fields and scan the index instead.
 // We would need JOIN to support that.
 function select_Unsafe(remote, table, fields, predicate) {
-    const predicateFields = Object.keys(predicate);
+    const f_validPredicate = validatePredicate(remote, table, predicate);
+
+    const f_predicateFields = f_validPredicate.then(Object.keys);
     const f_queriedFields = validateQueriedFields(remote, table, fields);
-    const f_predicateFields = validatePredicateFields(remote, table, predicateFields);
 
-    return f_queriedFields.then(queriedFields => {
-        return f_predicateFields.then(predicateFields => {
-            const f_scanFn = scan.selectScanFn(remote, table, predicateFields);
+    const f_validPredicateFields = f_predicateFields.then(predicateFields => {
+        return validatePredicateFields(remote, table, predicateFields);
+    });
 
-            return f_scanFn
-                .then(scanFn => {
-                    return scanFn(remote, table, predicate);
-                })
-                .then(rows => {
-                    // Filter only the rows that satisfy the predicate
-                    const filtered = rows.filter(row => {
-                        const valid = predicateFields.map(field => {
-                            const matchValues = utils.arreturn(predicate[field]);
-                            return matchValues.includes(row[field]);
+    return f_validPredicate.then(validPredicate => {
+        return f_queriedFields.then(queriedFields => {
+            return f_validPredicateFields.then(predicateFields => {
+                const f_scanFn = scan.selectScanFn(remote, table, predicateFields);
+
+                return f_scanFn
+                    .then(scanFn => {
+                        return scanFn(remote, table, validPredicate);
+                    })
+                    .then(rows => {
+                        // Filter only the rows that satisfy the predicate
+                        const filtered = rows.filter(row => {
+                            const valid = predicateFields.map(field => {
+                                const matchValues = utils.arreturn(validPredicate[field]);
+                                return matchValues.includes(row[field]);
+                            });
+
+                            return valid.every(Boolean);
                         });
 
-                        return valid.every(Boolean);
+                        // Extract only the queried fields
+                        return filtered.map(row => {
+                            return utils.filterOKeys(row, key =>
+                                queriedFields.includes(key));
+                        });
                     });
-
-                    // Extract only the queried fields
-                    return filtered.map(row => {
-                        return utils.filterOKeys(row, key => queriedFields.includes(key));
-                    });
-                });
+            });
         });
+    });
+}
+
+// For queries, a missing predicate should implicitly satisfy
+// all the rows in a table. This method will swap an undefined
+// predicate for one that selects all rows in the table.
+function validatePredicate(remote, table, predicate) {
+    if (predicate !== undefined) return Promise.resolve(predicate);
+
+    const f_pkField = pks.getPKField(remote, table);
+    const f_maxPkValue = pks.getCurrentKey(remote, table);
+
+    return Promise.all([f_pkField, f_maxPkValue]).then(([pkField, maxPkValue]) => {
+        const pkRange = [...new Array(maxPkValue + 1).keys()];
+        pkRange.shift();
+        return { [pkField]: pkRange };
     });
 }
 
