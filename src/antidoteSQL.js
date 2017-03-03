@@ -10,6 +10,6 @@ module.exports = {
     createFK: fks.addFK_T,
     createIndex: indices.addIndex,
     createUniqueIndex: indices.addUniqueIndex,
-    insert: table.insertInto,
+    insert: table.insert,
     select: table.select
 };
