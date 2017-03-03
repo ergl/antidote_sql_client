@@ -49,9 +49,8 @@ function selectScanFn(remote, table, predicateFields) {
 // fields, even if we only use a single result. Not trivial to know, however,
 // as selects that are part of joins might not now which fields are going to
 // be used as part of the join.
-function scanFast(remote, table, pkRange) {
-    const pkBatch = utils.arreturn(pkRange);
-    const [pkStart, pkEnd] = pkBatch.length === 1 ? [pkBatch, pkBatch] : pkBatch;
+function scanFast(remote, table, pkValue) {
+    const pkValues = utils.arreturn(pkValue);
 
     // Assumes keys are numeric
     // Only useful for primary keys
@@ -59,41 +58,26 @@ function scanFast(remote, table, pkRange) {
     // FIXME: Change if using user-defined primary keys
     // In that case, should look in the appropiate unique index
     const f_validRange = pks.getCurrentKey(remote, table).then(max => {
-        return pkEnd <= max;
+        return pkValues.every(pk => pk <= max);
     });
 
     return f_validRange
         .then(validRange => {
             if (!validRange) {
                 throw new Error(
-                    `scanPrimary of key ${pkEnd} on ${table} is out of valid range`
+                    `scanFast of keys ${pkValues} on ${table} went out of valid range`
                 );
             }
 
             return schema.getSchema(remote, table);
         })
         .then(schema => {
-            // If called with just one key, like scan(A, A),
-            // fetch subkeys(A) instead
-            if (pkBatch.length === 1) {
-                const [pkStart] = pkBatch;
-                const key = keyEncoding.spk(table, pkStart);
-                const keyBatch = kv.subkeyBatch(remote, key);
-                return kv.get(remote, keyBatch).then(r => {
-                    return [toRow(r, schema)];
-                });
-            }
-
-            const [startKey, endKey] = [
-                keyEncoding.spk(table, pkStart),
-                keyEncoding.spk(table, pkEnd)
-            ];
-
-            // Given that we're interested in the subkeys of the primary key,
-            // we combine batch(A,B) + strictSubkeys(B)
-            const firstBatch = kv.keyBatch(remote, startKey, endKey);
-            const subkeyBatch = kv.strictSubkeyBatch(remote, endKey);
-            const keyBatch = firstBatch.concat(subkeyBatch);
+            const keyBatch = utils.flatten(
+                pkValues.map(pkValue => {
+                    const rootKey = keyEncoding.spk(table, pkValue);
+                    return kv.subkeyBatch(remote, rootKey);
+                })
+            );
 
             return kv.get(remote, keyBatch).then(results => {
                 return toRowExt(results, schema);
