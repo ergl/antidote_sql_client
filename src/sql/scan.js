@@ -115,11 +115,67 @@ function scanSequential(remote, table) {
     });
 }
 
+// Given a table, the name of an index, the name of a field indexed by it,
+// and an expected value (predicate), fetch the corresponding primary keys,
+// and then fetch the appropiate tables where this field exists with that value.
+// This scan should be faster than both scanFast and scanSequential.
+//
+// TODO: Return early if query only wanted primary key values
+// If the query was SELECT id FROM [...] WHERE indexedField = "foo"
+// this scan will be used, but after getting the id, they will be followed
+// and the entire table will be fetched. Then a filter will happen, extracting
+// only the id. If we know that only the id is used, we don't even have to make
+// a roundtrip to the database, and this scan will be free.
+//
+// TODO: Deal with values that don't exist
+function scanIndex(remote, table, index, field, value) {
+    const matchKey = keyEncoding.raw_index_field_value(table, index, field, value);
+    const matchedKeys = kv.strictSubkeyBatch(remote, matchKey);
+    const pkValues = matchedKeys.map(key => keyEncoding.getIndexData(key));
+    return fetchBatch(remote, table, pkValues);
+}
+
+// Given a table, the name of an unique index, the name of a field indexed by it,
+// and an expected value (predicate), fetch the corresponding primary key,
+// and then fetch the appropiate table where this field exists with that value.
+// This scan should be faster than both scanFast and scanSequential.
+//
+// TODO: Return early if query only wanted primary key values
+// If the query was SELECT id FROM [...] WHERE indexedField = "foo"
+// this scan will be used, but after getting the id, they will be followed
+// and the entire table will be fetched. Then a filter will happen, extracting
+// only the id. If we know that only the id is used, we only need a single roundtrip
+// instead of two.
+//
+// TODO: Deal with values that don't exist
+function scanUIndex(remote, table, index, field, value) {
+    const matchKey = keyEncoding.uindex_key(table, index, field, value);
+    const f_pkValue = kv.get(remote, matchKey);
+
+    return f_pkValue.then(pkValue => {
+        return fetchBatch(remote, table, pkValue);
+    });
+}
+
+function fetchBatch(remote, table, pkValue) {
+    const pkValues = utils.arreturn(pkValue);
+    const pks = pkValues.map(k => keyEncoding.spk(table, k));
+    const keyBatch = utils.flatten(pks.map(pk => kv.subkeyBatch(remote, pk)));
+
+    const f_schema = schema.getSchema(remote, table);
+    const f_result = kv.get(remote, keyBatch);
+
+    return Promise.all([f_schema, f_result]).then(([schema, results]) => {
+        return toRowExt(results, schema);
+    });
+}
+
 // Given a list of results from a scan, and a list of field names,
 // build an object { field: value }.
 //
 // Assumes length(row) = length(field_names)
-function toRow(row, field_names) {
+function toRow(map, field_names) {
+    const row = utils.arreturn(map);
     return row.reduce(
         (acc, curr, ix) => {
             return Object.assign(acc, { [field_names[ix]]: curr });
@@ -136,7 +192,8 @@ function toRow(row, field_names) {
 // For example:
 // toRowExt([1,2,3,1,2,3], ['foo','bar','baz'])
 // => [ { foo: 1, bar: 2, baz: 3 }, { foo: 1, bar: 2, baz: 3 } ]
-function toRowExt(row, field_names) {
+function toRowExt(map, field_names) {
+    const row = utils.arreturn(map);
     const res = [];
 
     let vi = 0;

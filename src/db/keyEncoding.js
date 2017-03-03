@@ -22,6 +22,10 @@ function wrap_index_key(t, i, f, v, k) {
     return { key: kset.index_key(t, i, f, kset.d_string(v), kset.d_int(k)) };
 }
 
+function wrap_raw_index_field_value(t, i, f, v) {
+    return { key: kset.raw_index_field_value(t, i, f, kset.d_string(v)) };
+}
+
 function wrap_uindex_key(t, i, f, v) {
     return { key: kset.uindex_key(t, i, f, kset.d_string(v)) };
 }
@@ -46,6 +50,20 @@ function wrap_field_from_key({ key }) {
     return kset.field_from_key(key);
 }
 
+// TODO: Extend to allow other kinds of data
+function unwrap_data(data) {
+    switch (data.tag) {
+        case 0:
+            return data[0];
+        default:
+            throw new Error(`Can't unwrap ${data}`);
+    }
+}
+
+function wrap_get_index_data({ key }) {
+    return unwrap_data(kset.get_index_data(key));
+}
+
 module.exports = {
     set_key,
     table: wrap_table,
@@ -57,5 +75,7 @@ module.exports = {
     isIndex: wrap_is_index,
     isUIndex: wrap_is_uindex,
     fieldFromKey: wrap_field_from_key,
-    toString: wrap_string
+    toString: wrap_string,
+    raw_index_field_value: wrap_raw_index_field_value,
+    getIndexData: wrap_get_index_data
 };
