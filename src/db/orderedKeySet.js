@@ -69,6 +69,14 @@ function wrap_batch(ini, fin, t) {
     });
 }
 
+function wrap_swap({ key: a }, { key: b }, t) {
+    return kset.swap(a, b, t);
+}
+
+function wrap_remove({ key }, t) {
+    return kset.remove(key, t);
+}
+
 function wrap_contents(t) {
     return unwrap_js_t_list(kset.contents(t)).map(kset.repr);
 }
@@ -130,6 +138,8 @@ module.exports = {
     subkeys: wrap_subkeys,
     strictSubKeys: wrap_strict_subkeys,
     batch: wrap_batch,
+    swap: wrap_swap,
+    remove: wrap_remove,
     contents: wrap_contents,
     serialize,
     deserialize,
