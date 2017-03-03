@@ -233,6 +233,40 @@ function select_Unsafe(remote, table, fields, predicate) {
     });
 }
 
+function update(remote, table, mapping, predicate) {
+    return kv.runT(remote, function(tx) {
+        return update_Unsafe(tx, table, mapping, predicate);
+    });
+}
+
+// TODO: Check for fk violations
+// TODO: Update indices (remove old entries)
+// TODO: Update incident foreign keys too
+function update_Unsafe(remote, table, mapping, predicate) {
+    const queriedFields = Object.keys(mapping);
+    const f_pkField = pks.getPKField(remote, table);
+    const f_rows = select(remote, table, '*', predicate);
+
+    const f_updatedRows = f_rows.then(rows => {
+        return rows.map(row => {
+            return utils.mapO(row, (k, v) => {
+                const vp = queriedFields.includes(k) ? mapping[k] : v;
+                return { [k]: vp };
+            });
+        });
+    });
+
+    return Promise.all([f_pkField, f_updatedRows]).then(([pkField, updatedRows]) => {
+        const f_inserts = updatedRows.map(row => {
+            const pkValue = row[pkField];
+            const mapping = utils.filterOKeys(row, k => k !== pkField);
+            return rawInsert_Unsafe(remote, table, pkValue, mapping);
+        });
+
+        return Promise.all(f_inserts);
+    });
+}
+
 // For queries, a missing predicate should implicitly satisfy
 // all the rows in a table. This method will swap an undefined
 // predicate for one that selects all rows in the table.
