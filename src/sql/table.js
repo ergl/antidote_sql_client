@@ -283,7 +283,6 @@ function update(remote, table, mapping, predicate) {
     });
 }
 
-// TODO: Update in-fks
 // TODO: Update indices (remove old entries)
 // TODO: Update incident foreign keys too
 function update_Unsafe(remote, table, mapping, predicate) {
@@ -291,35 +290,51 @@ function update_Unsafe(remote, table, mapping, predicate) {
     const f_pkField = pks.getPKField(remote, table);
     const f_rows = select(remote, table, '*', predicate);
 
-    const f_updatedRows = f_rows.then(rows => {
-
-        return rows.map(row => {
-            return utils.mapO(row, (k, v) => {
-                const vp = queriedFields.includes(k) ? mapping[k] : v;
-                return { [k]: vp };
-            });
+    const f_rowsWereNotReferenced = f_rows.then(rows => {
+        const f_checks = rows.map(row => checkInFKViolation_Unsafe(remote, table, row));
+        return Promise.all(f_checks).then(checks => {
+            return checks.every(Boolean);
         });
     });
 
-    return Promise.all([f_pkField, f_updatedRows]).then(([pkField, updatedRows]) => {
-        const f_inserts = updatedRows.map(row => {
-            // Our foreign key guarantees say
-            // A value X in a child column may only be updated to a value Y
-            // if Y exists in the parent column.
-            // This will check that the new row satisifies this point
-            const validFKs = checkFKViolation_Unsafe(remote, table, row);
+    return f_rowsWereNotReferenced
+        .then(rowsWereNotReferenced => {
+            if (!rowsWereNotReferenced) {
+                throw new Error(
+                    `Can't updated table ${table} as it is referenced by another table`
+                );
+            }
 
-            return validFKs.then(valid => {
-                if (!valid) throw new Error('FK constraint failed');
-
-                const pkValue = row[pkField];
-                const mapping = utils.filterOKeys(row, k => k !== pkField);
-                return rawInsert_Unsafe(remote, table, pkValue, mapping);
+            const f_updatedRows = f_rows.then(rows => {
+                return rows.map(row => {
+                    return utils.mapO(row, (k, v) => {
+                        const vp = queriedFields.includes(k) ? mapping[k] : v;
+                        return { [k]: vp };
+                    });
+                });
             });
-        });
 
-        return Promise.all(f_inserts);
-    });
+            return Promise.all([f_pkField, f_updatedRows]);
+        })
+        .then(([pkField, updatedRows]) => {
+            const f_inserts = updatedRows.map(row => {
+                // Our foreign key guarantees say
+                // A value X in a child column may only be updated to a value Y
+                // if Y exists in the parent column.
+                // This will check that the new row satisifies this point
+                const validFKs = checkOutFKViolation_Unsafe(remote, table, row);
+
+                return validFKs.then(valid => {
+                    if (!valid) throw new Error('FK constraint failed');
+
+                    const pkValue = row[pkField];
+                    const mapping = utils.filterOKeys(row, k => k !== pkField);
+                    return rawInsert_Unsafe(remote, table, pkValue, mapping);
+                });
+            });
+
+            return Promise.all(f_inserts);
+        });
 }
 
 // For queries, a missing predicate should implicitly satisfy
