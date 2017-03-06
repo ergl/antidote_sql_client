@@ -241,7 +241,7 @@ function update(remote, table, mapping, predicate) {
     });
 }
 
-// TODO: Check for fk violations
+// TODO: Update in-fks
 // TODO: Update indices (remove old entries)
 // TODO: Update incident foreign keys too
 function update_Unsafe(remote, table, mapping, predicate) {
@@ -250,6 +250,7 @@ function update_Unsafe(remote, table, mapping, predicate) {
     const f_rows = select(remote, table, '*', predicate);
 
     const f_updatedRows = f_rows.then(rows => {
+
         return rows.map(row => {
             return utils.mapO(row, (k, v) => {
                 const vp = queriedFields.includes(k) ? mapping[k] : v;
@@ -260,9 +261,19 @@ function update_Unsafe(remote, table, mapping, predicate) {
 
     return Promise.all([f_pkField, f_updatedRows]).then(([pkField, updatedRows]) => {
         const f_inserts = updatedRows.map(row => {
-            const pkValue = row[pkField];
-            const mapping = utils.filterOKeys(row, k => k !== pkField);
-            return rawInsert_Unsafe(remote, table, pkValue, mapping);
+            // Our foreign key guarantees say
+            // A value X in a child column may only be updated to a value Y
+            // if Y exists in the parent column.
+            // This will check that the new row satisifies this point
+            const validFKs = checkFKViolation_Unsafe(remote, table, row);
+
+            return validFKs.then(valid => {
+                if (!valid) throw new Error('FK constraint failed');
+
+                const pkValue = row[pkField];
+                const mapping = utils.filterOKeys(row, k => k !== pkField);
+                return rawInsert_Unsafe(remote, table, pkValue, mapping);
+            });
         });
 
         return Promise.all(f_inserts);
