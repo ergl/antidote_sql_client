@@ -131,9 +131,6 @@ function correlateFKs(remote, table_name, field_names) {
 // Given a table name, and a list of field names, return a list of the foreign key structure
 // for any of the fields, in the form [ {reference_table, field_name} ].
 //
-// Whereas `getForeignTable` only returns the reference table, this function will also return
-// the name of the field.
-//
 // This function is unsafe. It MUST be ran inside a transaction.
 //
 function correlateFKs_Unsafe(remote, table_name, field_name) {
