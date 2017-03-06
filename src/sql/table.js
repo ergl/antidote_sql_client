@@ -152,9 +152,7 @@ function checkOutFKViolation_Unsafe(remote, table, mapping) {
                 });
         });
 
-        return Promise.all(validChecks).then(all_checks => {
-            return all_checks.every(Boolean);
-        });
+        return Promise.all(validChecks).then(allChecks => allChecks.every(Boolean));
     });
 }
 
