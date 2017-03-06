@@ -122,7 +122,7 @@ function setInFK(remote, table_name, fks) {
 // another transaction (given that the current API doesn't allow nested transaction).
 // In that case, all operations will be executed in the current transaction.
 //
-function correlateFKs_T(remote, table_name, field_names) {
+function correlateFKs(remote, table_name, field_names) {
     return kv.runT(remote, function(tx) {
         return correlateFKs_Unsafe(tx, table_name, field_names);
     });
@@ -147,5 +147,5 @@ function correlateFKs_Unsafe(remote, table_name, field_name) {
 
 module.exports = {
     addFK_T,
-    correlateFKs_T
+    correlateFKs
 };
