@@ -91,7 +91,7 @@ function getFKs(remote, table_name) {
 function getInFKs(remote, table_name) {
     const meta_key = keyEncoding.table(table_name);
     return kv.get(remote, meta_key).then(meta => {
-        const fks = meta.outfks;
+        const fks = meta.infks;
         return fks === undefined ? [] : fks;
     });
 }
