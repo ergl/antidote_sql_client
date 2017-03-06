@@ -70,7 +70,7 @@ function insertInto_Unsafe(remote, table, mapping) {
             // TODO: Add bottom value for nullable fields
             return schema.validateSchema(remote, table, insertFields).then(r => {
                 if (!r) throw new Error('Invalid schema');
-                return checkFKViolation_Unsafe(remote, table, mapping);
+                return checkOutFKViolation_Unsafe(remote, table, mapping);
             });
         })
         .then(valid => {
@@ -110,7 +110,6 @@ function rawInsert_Unsafe(remote, table, pkValue, mapping) {
 //
 // - A value X may only be inserted into the child column if X also exists in the parent column.
 // - A value X in a child column may only be updated to a value Y if Y exists in the parent column.
-// - A value X in the parent column may only be changed or deleted if X does not exist in the child column.
 //
 // Return true if both conditions are met. Foreign keys are represented as regular fields,
 // plus some metadata attached to the table. This means that every insert and update has
@@ -119,9 +118,9 @@ function rawInsert_Unsafe(remote, table, pkValue, mapping) {
 //
 // This function is unsafe. It MUST be ran inside a transaction.
 //
-function checkFKViolation_Unsafe(remote, table, mapping) {
+function checkOutFKViolation_Unsafe(remote, table, mapping) {
     const fieldNames = Object.keys(mapping);
-    const correlated = fks.correlateFKs(remote, table, fieldNames);
+    const f_relation = fks.correlateFKs(remote, table, fieldNames);
 
     // TODO: Valid for now, change if primary keys are user defined, and / or when fks
     // may point to arbitrary fields
@@ -130,7 +129,7 @@ function checkFKViolation_Unsafe(remote, table, mapping) {
     // And given that primary keys are only autoincremented, and the database is append-only
     // We can check if a specific row exists by checking it its less or equal to the keyrange
     // The actual logic for the cutoff is implemented inside select
-    return correlated.then(relation => {
+    return f_relation.then(relation => {
         const validChecks = relation.map(({ reference_table, field_name }) => {
             const range = mapping[field_name];
             // FIXME: Change if FK can be against non-primary fields
@@ -142,7 +141,8 @@ function checkFKViolation_Unsafe(remote, table, mapping) {
                 .then(rows => {
                     // FIXME: Use unique index instead
                     assert(rows.length === 1);
-                    const value = rows[0][field_name];
+                    const row = rows[0];
+                    const value = row[field_name];
                     return value === mapping[field_name];
                 })
                 // TODO: Tag cutoff error
