@@ -287,41 +287,58 @@ function update(remote, table, mapping, predicate) {
 // TODO: Update incident foreign keys too
 function update_Unsafe(remote, table, mapping, predicate) {
     const queriedFields = Object.keys(mapping);
-    const f_pkField = pks.getPKField(remote, table);
-    const f_rows = select(remote, table, '*', predicate);
 
-    const f_rowsWereNotReferenced = f_rows.then(rows => {
-        const f_checks = rows.map(row => checkInFKViolation_Unsafe(remote, table, row));
-        return Promise.all(f_checks).then(checks => {
-            return checks.every(Boolean);
-        });
-    });
+    const f_pkNotPresent = pks.containsPK(remote, table, queriedFields);
 
-    return f_rowsWereNotReferenced
-        .then(rowsWereNotReferenced => {
+    return f_pkNotPresent
+        // Check if trying to update a primary key
+        // If it is, abort the transaction
+        .then(({ contained, pkField }) => {
+            if (contained) {
+                throw new Error(
+                    `Updates to autoincremented primary keys are not allowed`
+                );
+            }
+
+            const f_oldRows = select(remote, table, '*', predicate);
+
+            // Check if any of the affected rows is being referenced by another table
+            const f_rowsWereNotReferenced = f_oldRows.then(oldRows => {
+                const f_checks = oldRows.map(oldRow => {
+                    return checkInFKViolation_Unsafe(remote, table, oldRow);
+                });
+
+                return Promise.all(f_checks).then(checks => {
+                    return checks.every(Boolean);
+                });
+            });
+
+            const wait = Promise.all([f_oldRows, f_rowsWereNotReferenced]);
+            return wait.then(([oldRows, rowsWereNotReferenced]) => {
+                return { oldRows, rowsWereNotReferenced, pkField };
+            });
+        })
+        .then(({ oldRows, rowsWereNotReferenced, pkField }) => {
+            // If any of the old rows was referenced, abort the transaction
             if (!rowsWereNotReferenced) {
                 throw new Error(
                     `Can't updated table ${table} as it is referenced by another table`
                 );
             }
 
-            const f_updatedRows = f_rows.then(rows => {
-                return rows.map(row => {
-                    return utils.mapO(row, (k, v) => {
-                        const vp = queriedFields.includes(k) ? mapping[k] : v;
-                        return { [k]: vp };
-                    });
+            const updatedRows = oldRows.map(oldRow => {
+                return utils.mapO(oldRow, (k, v) => {
+                    const vp = queriedFields.includes(k) ? mapping[k] : v;
+                    return { [k]: vp };
                 });
             });
 
-            return Promise.all([f_pkField, f_updatedRows]);
-        })
-        .then(([pkField, updatedRows]) => {
             const f_inserts = updatedRows.map(row => {
                 // Our foreign key guarantees say
                 // A value X in a child column may only be updated to a value Y
                 // if Y exists in the parent column.
                 // This will check that the new row satisifies this point
+                // If it violates the guarantee, abort the transaction
                 const validFKs = checkOutFKViolation_Unsafe(remote, table, row);
 
                 return validFKs.then(valid => {
