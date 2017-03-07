@@ -11,7 +11,7 @@
     "dependencies": {
         "antidote_ts_client": "0.1.5",
         "bs-platform": "1.4.2",
-        "kset": "0.6.0"
+        "kset": "0.7.0"
     },
     "devDependencies": {
         "rewire": "2.5.2"

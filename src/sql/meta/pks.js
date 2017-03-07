@@ -58,14 +58,14 @@ function incrKey(remote, table_name) {
 
 // Given a list of fields, return if it contains a primary key
 // Return { contained : true, pkField : string } if found,
-// { contained : false } otherwise
+// { contained : false, pkField : string } otherwise
 function containsPK(remote, table, fields) {
     return getPKField(remote, table).then(pkField => {
         if (fields.includes(pkField)) {
             return { contained: true, pkField };
         }
 
-        return { contained: false };
+        return { contained: false, pkField };
     });
 }
 

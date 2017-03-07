@@ -91,7 +91,7 @@ function getFKs(remote, table_name) {
 function getInFKs(remote, table_name) {
     const meta_key = keyEncoding.table(table_name);
     return kv.get(remote, meta_key).then(meta => {
-        const fks = meta.outfks;
+        const fks = meta.infks;
         return fks === undefined ? [] : fks;
     });
 }
@@ -122,7 +122,7 @@ function setInFK(remote, table_name, fks) {
 // another transaction (given that the current API doesn't allow nested transaction).
 // In that case, all operations will be executed in the current transaction.
 //
-function correlateFKs_T(remote, table_name, field_names) {
+function correlateFKs(remote, table_name, field_names) {
     return kv.runT(remote, function(tx) {
         return correlateFKs_Unsafe(tx, table_name, field_names);
     });
@@ -130,9 +130,6 @@ function correlateFKs_T(remote, table_name, field_names) {
 
 // Given a table name, and a list of field names, return a list of the foreign key structure
 // for any of the fields, in the form [ {reference_table, field_name} ].
-//
-// Whereas `getForeignTable` only returns the reference table, this function will also return
-// the name of the field.
 //
 // This function is unsafe. It MUST be ran inside a transaction.
 //
@@ -147,5 +144,6 @@ function correlateFKs_Unsafe(remote, table_name, field_name) {
 
 module.exports = {
     addFK_T,
-    correlateFKs_T
+    getInFKs,
+    correlateFKs,
 };

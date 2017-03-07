@@ -289,16 +289,13 @@ function updateIndices(remote, table, fk_value, mapping) {
 }
 
 function updateSingleIndex(table, index, fk_value, field_names, field_values) {
-    const nested_index_keys = field_names.map((fld_name, i) => {
-        const fieldValue = field_values[i];
-        return [
-            // Sentinel super key for scans
-            keyEncoding.raw_index_field_value(table, index, fld_name, fieldValue),
-            keyEncoding.index_key(table, index, fld_name, fieldValue, fk_value)
-        ];
-    });
-
-    const indexKeys = utils.flatten(nested_index_keys);
+    const indexKeys = updateSingleIndexKeys(
+        table,
+        index,
+        fk_value,
+        field_names,
+        field_values
+    );
 
     // TODO: If bottom value is defined, use it for these keys
     // Just sentinel keys, should add them to the kset instead
@@ -307,7 +304,20 @@ function updateSingleIndex(table, index, fk_value, field_names, field_values) {
     return { keys: indexKeys, values: indexValues };
 }
 
-function updateUIndices(remote, table, fk_value, mapping) {
+function updateSingleIndexKeys(table, index, fkValue, fieldNames, fieldValues) {
+    const nested_index_keys = fieldNames.map((fieldName, ix) => {
+        const fieldValue = fieldValues[ix];
+        return [
+            // Sentinel super key for scans
+            keyEncoding.raw_index_field_value(table, index, fieldName, fieldValue),
+            keyEncoding.index_key(table, index, fieldName, fieldValue, fkValue)
+        ];
+    });
+
+    return utils.flatten(nested_index_keys);
+}
+
+function updateUIndices(remote, table, fkValue, mapping) {
     const field_names = Object.keys(mapping);
     const correlated = correlateUniqueIndices(remote, table, field_names);
 
@@ -315,19 +325,23 @@ function updateUIndices(remote, table, fk_value, mapping) {
         const uIndexMapping = relation.reduce(
             (acc, { index_name, field_names }) => {
                 // FIXME: field f might not be in the mapping
-                const field_values = field_names.map(f => mapping[f]);
+                const fieldValues = field_names.map(f => mapping[f]);
                 const { keys, values } = updateSingleUIndex(
                     table,
                     index_name,
-                    fk_value,
+                    fkValue,
                     field_names,
-                    field_values
+                    fieldValues
                 );
 
                 return {
                     keys: acc.keys.concat(keys),
                     values: acc.values.concat(values),
-                    expected: acc.expected.concat(fk_value)
+                    // As this is an unique index, we only want this operation to succeed if
+                    // the current value of the index is either fkValue or null (bottom)
+                    // If it fails, it means that this index key is already used, and therefore
+                    // there is an uniqueness guarantee violation.
+                    expected: acc.expected.concat(fkValue)
                 };
             },
             { keys: [], values: [], expected: [] }
@@ -346,17 +360,80 @@ function updateUIndices(remote, table, fk_value, mapping) {
 
 // TODO: Generate super keys if we want sequential scans over unique indices
 function updateSingleUIndex(table, index, fk_value, field_names, field_values) {
-    const uindex_keys = field_names.map((fld_name, i) => {
-        return keyEncoding.uindex_key(table, index, fld_name, field_values[i]);
-    });
-
+    const uindex_keys = updateSingleUIndexKeys(table, index, field_names, field_values);
     const uindex_values = field_names.map(_ => fk_value);
     return { keys: uindex_keys, values: uindex_values };
+}
+
+function updateSingleUIndexKeys(table, index, fieldNames, fieldValues) {
+    return fieldNames.map((fieldName, ix) => {
+        return keyEncoding.uindex_key(table, index, fieldName, fieldValues[ix]);
+    });
+}
+
+function pruneIndices(remote, table, fkValues, rows) {
+    const swaps = fkValues.map((fkValue, ix) => {
+        return pruneRowIndices(remote, table, fkValue, rows[ix]);
+    });
+
+    // TODO: Is it necessary to wait here?
+    return Promise.all(swaps);
+}
+
+function pruneRowIndices(remote, table, fkValue, row) {
+    const fieldNames = Object.keys(row);
+    const correlated = correlateIndices(remote, table, fieldNames);
+
+    return correlated.then(relation => {
+        const nested_keys = relation.map(({ index_name, field_names }) => {
+            const fieldValues = field_names.map(f => row[f]);
+            return updateSingleIndexKeys(
+                table,
+                index_name,
+                fkValue,
+                field_names,
+                fieldValues
+            );
+        });
+
+        const keys = utils.flatten(nested_keys);
+        keys.forEach(key => {
+            kv.removeKey(remote, key);
+        });
+    });
+}
+
+function pruneUniqueIndices(remote, table, rows) {
+    const swaps = rows.map(row => {
+        return pruneRowUniqueIndices(remote, table, row);
+    });
+
+    // TODO: Is it necessary to wait here?
+    return Promise.all(swaps);
+}
+
+function pruneRowUniqueIndices(remote, table, row) {
+    const fieldNames = Object.keys(row);
+    const correlated = correlateUniqueIndices(remote, table, fieldNames);
+
+    return correlated.then(relation => {
+        const nested_keys = relation.map(({ index_name, field_names }) => {
+            const fieldValues = field_names.map(f => row[f]);
+            return updateSingleUIndexKeys(table, index_name, field_names, fieldValues);
+        });
+
+        const keys = utils.flatten(nested_keys);
+        keys.forEach(key => {
+            kv.removeKey(remote, key);
+        });
+    });
 }
 
 module.exports = {
     addIndex,
     addUniqueIndex,
     updateIndices,
-    updateUIndices
+    updateUIndices,
+    pruneIndices,
+    pruneUniqueIndices
 };

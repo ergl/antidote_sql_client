@@ -30,7 +30,7 @@ function create(remote, name, schema) {
 // another transaction (given that the current API doesn't allow nested transaction).
 // In that case, all operations will be executed in the current transaction.
 //
-function insertInto(remote, name, mapping) {
+function insert(remote, name, mapping) {
     return kv.runT(remote, function(tx) {
         return insertInto_Unsafe(tx, name, mapping);
     });
@@ -70,7 +70,7 @@ function insertInto_Unsafe(remote, table, mapping) {
             // TODO: Add bottom value for nullable fields
             return schema.validateSchema(remote, table, insertFields).then(r => {
                 if (!r) throw new Error('Invalid schema');
-                return checkFK_Unsafe(remote, table, mapping);
+                return checkOutFKViolation_Unsafe(remote, table, mapping);
             });
         })
         .then(valid => {
@@ -78,25 +78,31 @@ function insertInto_Unsafe(remote, table, mapping) {
             return pks.fetchAddPrimaryKey_T(remote, table);
         })
         .then(pk_value => {
-            const field_names = Object.keys(mapping);
-            const pk_key = keyEncoding.spk(table, pk_value);
-            const field_keys = field_names.map(f => {
-                return keyEncoding.field(table, pk_value, f);
-            });
-            const field_values = field_names.map(f => mapping[f]);
-
-            const keys = field_keys.concat(pk_key);
-            const values = field_values.concat(pk_value);
-
-            return kv
-                .put(remote, keys, values)
-                .then(_ => {
-                    return indices.updateIndices(remote, table, pk_value, mapping);
-                })
-                .then(_ => {
-                    return indices.updateUIndices(remote, table, pk_value, mapping);
-                });
+            return rawInsert_Unsafe(remote, table, pk_value, mapping);
         });
+}
+
+// Given a table, a primary key value, and a map of field names to field values
+// (excluding the primary key), insert them into the database. This function will
+// not check the validity of the primary key value, or that the fields are part of
+// the table schema. However, this function will update all the related indices that
+// are associated with this table, if any of the inserted fields is being indexed.
+//
+// This function is unsafe. It MUST be ran inside a transaction.
+//
+function rawInsert_Unsafe(remote, table, pkValue, mapping) {
+    const fieldNames = Object.keys(mapping);
+    const pkKey = keyEncoding.spk(table, pkValue);
+    const fieldKeys = fieldNames.map(f => keyEncoding.field(table, pkValue, f));
+    const fieldValues = fieldNames.map(f => mapping[f]);
+
+    const keys = [pkKey, ...fieldKeys];
+    const values = [pkValue, ...fieldValues];
+
+    return kv
+        .put(remote, keys, values)
+        .then(_ => indices.updateIndices(remote, table, pkValue, mapping))
+        .then(_ => indices.updateUIndices(remote, table, pkValue, mapping));
 }
 
 // Given a table, and a map of updated field names to their values,
@@ -112,9 +118,9 @@ function insertInto_Unsafe(remote, table, mapping) {
 //
 // This function is unsafe. It MUST be ran inside a transaction.
 //
-function checkFK_Unsafe(remote, table, mapping) {
-    const field_names = Object.keys(mapping);
-    const correlated = fks.correlateFKs_T(remote, table, field_names);
+function checkOutFKViolation_Unsafe(remote, table, mapping) {
+    const fieldNames = Object.keys(mapping);
+    const f_relation = fks.correlateFKs(remote, table, fieldNames);
 
     // TODO: Valid for now, change if primary keys are user defined, and / or when fks
     // may point to arbitrary fields
@@ -123,8 +129,8 @@ function checkFK_Unsafe(remote, table, mapping) {
     // And given that primary keys are only autoincremented, and the database is append-only
     // We can check if a specific row exists by checking it its less or equal to the keyrange
     // The actual logic for the cutoff is implemented inside select
-    return correlated.then(relation => {
-        const valid_checks = relation.map(({ reference_table, field_name }) => {
+    return f_relation.then(relation => {
+        const validChecks = relation.map(({ reference_table, field_name }) => {
             const range = mapping[field_name];
             // FIXME: Change if FK can be against non-primary fields
             const f_select = select(remote, reference_table, field_name, {
@@ -135,18 +141,62 @@ function checkFK_Unsafe(remote, table, mapping) {
                 .then(rows => {
                     // FIXME: Use unique index instead
                     assert(rows.length === 1);
-                    const value = rows[0][field_name];
+                    const row = rows[0];
+                    const value = row[field_name];
                     return value === mapping[field_name];
                 })
+                // TODO: Tag cutoff error
                 .catch(cutoff_error => {
                     console.log(cutoff_error);
                     return false;
                 });
         });
 
-        return Promise.all(valid_checks).then(all_checks => {
-            return all_checks.every(Boolean);
+        return Promise.all(validChecks).then(allChecks => allChecks.every(Boolean));
+    });
+}
+
+// Given a table, and a map of field names to their values (candidate to be updated),
+// check if the new values satisfy foreign key constraints, following that:
+//
+// - A value X in the parent column may only be changed or deleted if X does not exist in the child column.
+//
+// Return true if the condition is met. Foreign keys are represented as regular fields,
+// plus some metadata attached to the table. This means that every insert and update has
+// to check in the parent table, and updates to the parent table will have to check
+// referencing tables. In contrast, reads of foreign keys incur no extra cost.
+//
+// This function is unsafe. It MUST be ran inside a transaction.
+//
+// TODO: Revisit assumptions
+// Assumptions: Given that FK can only be placed on primary keys,
+// we don't have to check that the new value is repeated, as that is asserted by
+// the current `update` behaviour. We only need to check that the old value is not being used
+function checkInFKViolation_Unsafe(remote, table, mapping) {
+    const f_inFKs = fks.getInFKs(remote, table);
+
+    // TODO: Valid for now, change if primary keys are user defined, and / or when fks
+    // may point to arbitrary fields
+    //
+    // Foreign keys may be only created against primary keys, not arbitrary fields
+    // And given that primary keys are only autoincremented, and the database is append-only
+    // We can check if a specific row exists by checking it its less or equal to the keyrange
+    // The actual logic for the cutoff is implemented inside select
+    return f_inFKs.then(inFKs => {
+        const validChecks = inFKs.map(({ reference_table, field_name }) => {
+            // The predicate will be "WHERE field_name = OLD_FK_VALUE"
+            // This should return 0 rows to be value
+            const predicate = { [field_name]: mapping[field_name] };
+            const f_select = select(remote, reference_table, field_name, predicate);
+
+            // In this case, a cutoff error should not happen,
+            // as we're selecting a non-pk value
+            return f_select.then(rows => {
+                return rows.length === 0;
+            });
         });
+
+        return Promise.all(validChecks).then(allChecks => allChecks.every(Boolean));
     });
 }
 
@@ -187,35 +237,142 @@ function select(remote, table, fields, predicate) {
 // Detect indexed fields and scan the index instead.
 // We would need JOIN to support that.
 function select_Unsafe(remote, table, fields, predicate) {
-    const predicateFields = Object.keys(predicate);
+    const f_validPredicate = validatePredicate(remote, table, predicate);
+
+    const f_predicateFields = f_validPredicate.then(Object.keys);
     const f_queriedFields = validateQueriedFields(remote, table, fields);
-    const f_predicateFields = validatePredicateFields(remote, table, predicateFields);
 
-    return f_queriedFields.then(queriedFields => {
-        return f_predicateFields.then(predicateFields => {
-            const f_scanFn = scan.selectScanFn(remote, table, predicateFields);
+    const f_validPredicateFields = f_predicateFields.then(predicateFields => {
+        return validatePredicateFields(remote, table, predicateFields);
+    });
 
-            return f_scanFn
-                .then(scanFn => {
-                    return scanFn(remote, table, predicate);
-                })
-                .then(rows => {
-                    // Filter only the rows that satisfy the predicate
-                    const filtered = rows.filter(row => {
-                        const valid = predicateFields.map(field => {
-                            const matchValues = utils.arreturn(predicate[field]);
-                            return matchValues.includes(row[field]);
+    return f_validPredicate.then(validPredicate => {
+        return f_queriedFields.then(queriedFields => {
+            return f_validPredicateFields.then(predicateFields => {
+                const f_scanFn = scan.selectScanFn(remote, table, predicateFields);
+
+                return f_scanFn
+                    .then(scanFn => {
+                        return scanFn(remote, table, validPredicate);
+                    })
+                    .then(rows => {
+                        // Filter only the rows that satisfy the predicate
+                        const filtered = rows.filter(row => {
+                            const valid = predicateFields.map(field => {
+                                const matchValues = utils.arreturn(validPredicate[field]);
+                                return matchValues.includes(row[field]);
+                            });
+
+                            return valid.every(Boolean);
                         });
 
-                        return valid.every(Boolean);
+                        // Extract only the queried fields
+                        return filtered.map(row => {
+                            return utils.filterOKeys(row, key =>
+                                queriedFields.includes(key));
+                        });
                     });
+            });
+        });
+    });
+}
 
-                    // Extract only the queried fields
-                    return filtered.map(row => {
-                        return utils.filterOKeys(row, key => queriedFields.includes(key));
-                    });
+function update(remote, table, mapping, predicate) {
+    return kv.runT(remote, function(tx) {
+        return update_Unsafe(tx, table, mapping, predicate);
+    });
+}
+
+function update_Unsafe(remote, table, mapping, predicate) {
+    const queriedFields = Object.keys(mapping);
+
+    const f_pkNotPresent = pks.containsPK(remote, table, queriedFields);
+
+    return f_pkNotPresent
+        // Check if trying to update a primary key
+        // If it is, abort the transaction
+        .then(({ contained, pkField }) => {
+            if (contained) {
+                throw new Error(
+                    `Updates to autoincremented primary keys are not allowed`
+                );
+            }
+
+            const f_oldRows = select(remote, table, '*', predicate);
+
+            // Check if any of the affected rows is being referenced by another table
+            const f_rowsWereNotReferenced = f_oldRows.then(oldRows => {
+                const f_checks = oldRows.map(oldRow => {
+                    return checkInFKViolation_Unsafe(remote, table, oldRow);
+                });
+
+                return Promise.all(f_checks).then(checks => {
+                    return checks.every(Boolean);
+                });
+            });
+
+            const wait = Promise.all([f_oldRows, f_rowsWereNotReferenced]);
+            return wait.then(([oldRows, rowsWereNotReferenced]) => {
+                return { oldRows, rowsWereNotReferenced, pkField };
+            });
+        })
+        .then(({ oldRows, rowsWereNotReferenced, pkField }) => {
+            // If any of the old rows was referenced, abort the transaction
+            if (!rowsWereNotReferenced) {
+                throw new Error(
+                    `Can't updated table ${table} as it is referenced by another table`
+                );
+            }
+
+            const updatedRows = oldRows.map(oldRow => {
+                return utils.mapO(oldRow, (k, v) => {
+                    const vp = queriedFields.includes(k) ? mapping[k] : v;
+                    return { [k]: vp };
+                });
+            });
+
+            const f_inserts = updatedRows.map(row => {
+                // Our foreign key guarantees say
+                // A value X in a child column may only be updated to a value Y
+                // if Y exists in the parent column.
+                // This will check that the new row satisifies this point
+                // If it violates the guarantee, abort the transaction
+                const validFKs = checkOutFKViolation_Unsafe(remote, table, row);
+
+                return validFKs.then(valid => {
+                    if (!valid) throw new Error('FK constraint failed');
+
+                    const pkValue = row[pkField];
+                    const mapping = utils.filterOKeys(row, k => k !== pkField);
+                    return rawInsert_Unsafe(remote, table, pkValue, mapping);
+                });
+            });
+
+            const fkValues = updatedRows.map(row => row[pkField]);
+
+            return Promise.all(f_inserts)
+                .then(_ => {
+                    return indices.pruneIndices(remote, table, fkValues, oldRows);
+                })
+                .then(_ => {
+                    return indices.pruneUniqueIndices(remote, table, oldRows);
                 });
         });
+}
+
+// For queries, a missing predicate should implicitly satisfy
+// all the rows in a table. This method will swap an undefined
+// predicate for one that selects all rows in the table.
+function validatePredicate(remote, table, predicate) {
+    if (predicate !== undefined) return Promise.resolve(predicate);
+
+    const f_pkField = pks.getPKField(remote, table);
+    const f_maxPkValue = pks.getCurrentKey(remote, table);
+
+    return Promise.all([f_pkField, f_maxPkValue]).then(([pkField, maxPkValue]) => {
+        const pkRange = [...new Array(maxPkValue + 1).keys()];
+        pkRange.shift();
+        return { [pkField]: pkRange };
     });
 }
 
@@ -251,5 +408,6 @@ function validatePredicateFields(remote, table, field) {
 module.exports = {
     create,
     select,
-    insertInto
+    insert,
+    update
 };
