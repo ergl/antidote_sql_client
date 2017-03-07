@@ -172,6 +172,10 @@ function strictSubkeyBatch({ kset }, key) {
     return orderedKeySet.strictSubKeys(key, kset);
 }
 
+function removeKey({ kset }, key) {
+    return orderedKeySet.remove(key, kset);
+}
+
 module.exports = {
     createRemote,
     closeRemote,
@@ -181,5 +185,6 @@ module.exports = {
     condPut,
     keyBatch,
     subkeyBatch,
-    strictSubkeyBatch
+    strictSubkeyBatch,
+    removeKey
 };
