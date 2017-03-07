@@ -69,8 +69,8 @@ function wrap_batch(ini, fin, t) {
     });
 }
 
-function wrap_swap({ key: a }, { key: b }, t) {
-    return kset.swap(a, b, t);
+function wrap_swap({ key: oldKey }, { key: newKey }, t) {
+    return kset.swap(oldKey, newKey, t);
 }
 
 function wrap_remove({ key }, t) {
