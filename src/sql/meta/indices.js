@@ -371,9 +371,69 @@ function updateSingleUIndexKeys(table, index, fieldNames, fieldValues) {
     });
 }
 
+function pruneIndices(remote, table, fkValues, rows) {
+    const swaps = fkValues.map((fkValue, ix) => {
+        return pruneRowIndices(remote, table, fkValue, rows[ix]);
+    });
+
+    // TODO: Is it necessary to wait here?
+    return Promise.all(swaps);
+}
+
+function pruneRowIndices(remote, table, fkValue, row) {
+    const fieldNames = Object.keys(row);
+    const correlated = correlateIndices(remote, table, fieldNames);
+
+    return correlated.then(relation => {
+        const nested_keys = relation.map(({ index_name, field_names }) => {
+            const fieldValues = field_names.map(f => row[f]);
+            return updateSingleIndexKeys(
+                table,
+                index_name,
+                fkValue,
+                field_names,
+                fieldValues
+            );
+        });
+
+        const keys = utils.flatten(nested_keys);
+        keys.forEach(key => {
+            kv.removeKey(remote, key);
+        });
+    });
+}
+
+function pruneUniqueIndices(remote, table, rows) {
+    const swaps = rows.map(row => {
+        return pruneRowUniqueIndices(remote, table, row);
+    });
+
+    // TODO: Is it necessary to wait here?
+    return Promise.all(swaps);
+}
+
+function pruneRowUniqueIndices(remote, table, row) {
+    const fieldNames = Object.keys(row);
+    const correlated = correlateUniqueIndices(remote, table, fieldNames);
+
+    return correlated.then(relation => {
+        const nested_keys = relation.map(({ index_name, field_names }) => {
+            const fieldValues = field_names.map(f => row[f]);
+            return updateSingleUIndexKeys(table, index_name, field_names, fieldValues);
+        });
+
+        const keys = utils.flatten(nested_keys);
+        keys.forEach(key => {
+            kv.removeKey(remote, key);
+        });
+    });
+}
+
 module.exports = {
     addIndex,
     addUniqueIndex,
     updateIndices,
-    updateUIndices
+    updateUIndices,
+    pruneIndices,
+    pruneUniqueIndices
 };
