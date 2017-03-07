@@ -408,5 +408,6 @@ function validatePredicateFields(remote, table, field) {
 module.exports = {
     create,
     select,
-    insert
+    insert,
+    update
 };
