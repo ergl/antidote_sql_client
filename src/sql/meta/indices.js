@@ -385,20 +385,30 @@ function pruneRowIndices(remote, table, fkValue, row) {
     const correlated = correlateIndices(remote, table, fieldNames);
 
     return correlated.then(relation => {
-        const nested_keys = relation.map(({ index_name, field_names }) => {
+        const nested_sentinelKeys = relation.map(({ index_name, field_names }) => {
             const fieldValues = field_names.map(f => row[f]);
-            return updateSingleIndexKeys(
+            // FIXME: Assumes that it only returns two keys
+            // Won't be the case if we support multi-field indices
+            const [sentinel, indexKey] = updateSingleIndexKeys(
                 table,
                 index_name,
                 fkValue,
                 field_names,
                 fieldValues
             );
+
+            kv.removeKey(remote, indexKey);
+            return sentinel;
         });
 
-        const keys = utils.flatten(nested_keys);
-        keys.forEach(key => {
-            kv.removeKey(remote, key);
+        const sentinelKeys = utils.flatten(nested_sentinelKeys);
+        sentinelKeys.forEach(sentinel => {
+            const subkeys = kv.strictSubkeyBatch(remote, sentinel);
+            // If the sentinel key still has any subkeys, don't remove it
+            // We need the sentinel key for index scans
+            if (subkeys.length === 0) {
+                kv.removeKey(remote, sentinel);
+            }
         });
     });
 }
