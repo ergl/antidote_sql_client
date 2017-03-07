@@ -283,8 +283,6 @@ function update(remote, table, mapping, predicate) {
     });
 }
 
-// TODO: Update indices (remove old entries)
-// TODO: Update incident foreign keys too
 function update_Unsafe(remote, table, mapping, predicate) {
     const queriedFields = Object.keys(mapping);
 
@@ -350,7 +348,15 @@ function update_Unsafe(remote, table, mapping, predicate) {
                 });
             });
 
-            return Promise.all(f_inserts);
+            const fkValues = updatedRows.map(row => row[pkField]);
+
+            return Promise.all(f_inserts)
+                .then(_ => {
+                    return indices.pruneIndices(remote, table, fkValues, oldRows);
+                })
+                .then(_ => {
+                    return indices.pruneUniqueIndices(remote, table, oldRows);
+                });
         });
 }
 
