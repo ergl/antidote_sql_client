@@ -85,6 +85,10 @@ function raw_contents(t) {
     return unwrap_js_t_list(kset.contents(t));
 }
 
+function wrap_changed(t) {
+    return !!kset.changed(t);
+}
+
 function serialize(t) {
     return raw_contents(t).map(serializeKey);
 }
@@ -111,6 +115,8 @@ function deserialize(ser) {
     ser.forEach(serkey => {
         kset.add(deserializeKey(serkey), empt);
     });
+    // Reset the `changed` flag after adding all keys
+    kset.reset(empt);
     return empt;
 }
 
@@ -141,6 +147,7 @@ module.exports = {
     swap: wrap_swap,
     remove: wrap_remove,
     contents: wrap_contents,
+    wasChanged: wrap_changed,
     serialize,
     deserialize,
     serializeKey: wrap_serialize_key,
