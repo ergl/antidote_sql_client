@@ -67,14 +67,18 @@ function runT(remote, fn) {
         return read_set(tx_handle)
             .then(set => ({ remote: tx_handle, kset: set }))
             .then(tx => {
-                return fn(tx)
-                    .then(v => {
-                        if (!write_needed(tx)) return v;
-                        return write_set(tx).then(_ => v);
-                    })
-                    .then(v => {
-                        return commitT(tx.remote).then(ct => ({ ct, result: v }));
-                    });
+                const f_result = fn(tx).then(result => {
+                    if (!write_needed(tx)) {
+                        return result;
+                    }
+
+                    return write_set(tx).then(_ => result);
+                });
+
+                return f_result.then(result => {
+                    const f_ct = commitT(tx.remote);
+                    return f_ct.then(ct => ({ ct, result }));
+                });
             })
             .catch(e => {
                 return abortT(tx_handle).then(_ => {
