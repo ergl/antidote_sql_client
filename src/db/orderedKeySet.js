@@ -41,7 +41,9 @@ function wrap_add({ key }, t) {
 }
 
 function wrap_find({ key }, t) {
-    return kset.find(key, t);
+    const found = kset.find(key, t);
+    if (found === undefined) return found;
+    return { key: found };
 }
 
 function wrap_next({ key }, t) {
