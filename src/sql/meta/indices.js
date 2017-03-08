@@ -56,13 +56,13 @@ function addUniqueIndex(remote, table_name, { index_name, field_names: field_nam
         return schema.validateSchemaSubset(tx, table_name, field_names).then(r => {
             if (!r) throw new Error("Can't add unique index on non-existent fields");
 
-            return getUindices(tx, table_name).then(index_table => {
+            return getUniqueIndices(tx, table_name).then(index_table => {
                 const names = index_table.map(st => st.index_name);
                 if (names.includes(index_name)) {
                     throw new Error(`Can't override unique index ${index_name}`);
                 }
 
-                return setUindex(
+                return setUniqueIndex(
                     tx,
                     table_name,
                     index_table.concat({ index_name, field_names })
@@ -92,7 +92,7 @@ function getIndices(remote, table_name) {
 //
 // Will return the empty list if there are no unique indices.
 //
-function getUindices(remote, table_name) {
+function getUniqueIndices(remote, table_name) {
     const meta_key = keyEncoding.table(table_name);
     return kv.get(remote, meta_key).then(meta => {
         const indices = meta.uindices;
@@ -110,8 +110,8 @@ function setIndex(remote, table_name, indices) {
     });
 }
 
-// setUindex(r, t, idxs) will set the unique index map list of the table `t` to `idxs`
-function setUindex(remote, table_name, uindices) {
+// setUniqueIndex(r, t, idxs) will set the unique index map list of the table `t` to `idxs`
+function setUniqueIndex(remote, table_name, uindices) {
     const meta_key = keyEncoding.table(table_name);
     return kv.runT(remote, function(tx) {
         return kv.get(tx, meta_key).then(meta => {
@@ -139,8 +139,8 @@ function indexOfField(remote, table_name, indexed_field) {
 
 // Given a table name and one of its fields, return a list of indexes,
 // or the empty list if no indices are found.
-function uindexOfField(remote, table_name, indexed_field) {
-    return getUindices(remote, table_name).then(indices => {
+function uniqueIndexOfField(remote, table_name, indexed_field) {
+    return getUniqueIndices(remote, table_name).then(indices => {
         // Same as filter(f => f.field_name === indexed_field).map(f => f.index_name)
         const match_index = (acc, { index_name, field_names }) => {
             if (field_names.includes(indexed_field)) {
@@ -165,8 +165,8 @@ function fieldsOfIndex(remote, table_name, index_name) {
     });
 }
 
-function fieldsOfUindex(remote, table_name, index_name) {
-    return getUindices(remote, table_name).then(indices => {
+function fieldsOfUniqueIndex(remote, table_name, index_name) {
+    return getUniqueIndices(remote, table_name).then(indices => {
         const matching = indices.filter(idx_t => {
             const name = idx_t.index_name;
             return name === index_name;
@@ -217,7 +217,20 @@ function correlateIndices_Unsafe(remote, table_name, field_name) {
     });
 }
 
-// See correlateUindices_Unsafe for details.
+function containsIndex(remote, table, fields) {
+    return kv.runT(remote, function(tx) {
+        const f_relation = correlateIndices(tx, table, fields);
+        return f_relation.then(relation => {
+            if (relation.length === 0) {
+                return false;
+            }
+
+            return { contained: true, indexRelation: relation };
+        });
+    });
+}
+
+// See correlateUniqueIndices_Unsafe for details.
 //
 // This function will start a new transaction by default, unless called from inside
 // another transaction (given that the current API doesn't allow nested transaction).
@@ -225,22 +238,22 @@ function correlateIndices_Unsafe(remote, table_name, field_name) {
 //
 function correlateUniqueIndices(remote, table_name, field_names) {
     return kv.runT(remote, function(tx) {
-        return correlateUindices_Unsafe(tx, table_name, field_names);
+        return correlateUniqueIndices_Unsafe(tx, table_name, field_names);
     });
 }
 
 // Given a table name, and a list of field names, return a list of the unique
 // indices on any of the fields, in the form [ {index_name, field_names} ].
 //
-// Whereas `uindexOfField` only returns the index name, this function will also return
+// Whereas `uniqueIndexOfField` only returns the index name, this function will also return
 // all the fields of the index.
 //
 // This function is unsafe. It MUST be ran inside a transaction.
 //
-function correlateUindices_Unsafe(remote, table_name, field_name) {
+function correlateUniqueIndices_Unsafe(remote, table_name, field_name) {
     const field_names = utils.arreturn(field_name);
 
-    const promises = field_names.map(f => uindexOfField(remote, table_name, f));
+    const promises = field_names.map(f => uniqueIndexOfField(remote, table_name, f));
     return Promise.all(promises).then(results => {
         // Flatten and remove duplicates
         const indices = utils.squash(utils.flatten(results));
@@ -249,12 +262,25 @@ function correlateUindices_Unsafe(remote, table_name, field_name) {
         };
 
         const promises = indices.map(index => {
-            return fieldsOfUindex(remote, table_name, index).then(fields => {
+            return fieldsOfUniqueIndex(remote, table_name, index).then(fields => {
                 return correlate(index, fields);
             });
         });
 
         return Promise.all(promises);
+    });
+}
+
+function containsUniqueIndex(remote, table, fields) {
+    return kv.runT(remote, function(tx) {
+        const f_relation = correlateUniqueIndices(tx, table, fields);
+        return f_relation.then(relation => {
+            if (relation.length === 0) {
+                return false;
+            }
+
+            return { contained: true, indexRelation: relation };
+        });
     });
 }
 
@@ -317,7 +343,7 @@ function updateSingleIndexKeys(table, index, fkValue, fieldNames, fieldValues) {
     return utils.flatten(nested_index_keys);
 }
 
-function updateUIndices(remote, table, fkValue, mapping) {
+function updateUniqueIndices(remote, table, fkValue, mapping) {
     const field_names = Object.keys(mapping);
     const correlated = correlateUniqueIndices(remote, table, field_names);
 
@@ -326,7 +352,7 @@ function updateUIndices(remote, table, fkValue, mapping) {
             (acc, { index_name, field_names }) => {
                 // FIXME: field f might not be in the mapping
                 const fieldValues = field_names.map(f => mapping[f]);
-                const { keys, values } = updateSingleUIndex(
+                const { keys, values } = updateSingleUniqueIndex(
                     table,
                     index_name,
                     fkValue,
@@ -359,13 +385,18 @@ function updateUIndices(remote, table, fkValue, mapping) {
 }
 
 // TODO: Generate super keys if we want sequential scans over unique indices
-function updateSingleUIndex(table, index, fk_value, field_names, field_values) {
-    const uindex_keys = updateSingleUIndexKeys(table, index, field_names, field_values);
+function updateSingleUniqueIndex(table, index, fk_value, field_names, field_values) {
+    const uindex_keys = updateSingleUniqueIndexKeys(
+        table,
+        index,
+        field_names,
+        field_values
+    );
     const uindex_values = field_names.map(_ => fk_value);
     return { keys: uindex_keys, values: uindex_values };
 }
 
-function updateSingleUIndexKeys(table, index, fieldNames, fieldValues) {
+function updateSingleUniqueIndexKeys(table, index, fieldNames, fieldValues) {
     return fieldNames.map((fieldName, ix) => {
         return keyEncoding.uindex_key(table, index, fieldName, fieldValues[ix]);
     });
@@ -429,7 +460,12 @@ function pruneRowUniqueIndices(remote, table, row) {
     return correlated.then(relation => {
         const nested_keys = relation.map(({ index_name, field_names }) => {
             const fieldValues = field_names.map(f => row[f]);
-            return updateSingleUIndexKeys(table, index_name, field_names, fieldValues);
+            return updateSingleUniqueIndexKeys(
+                table,
+                index_name,
+                field_names,
+                fieldValues
+            );
         });
 
         const keys = utils.flatten(nested_keys);
@@ -442,8 +478,10 @@ function pruneRowUniqueIndices(remote, table, row) {
 module.exports = {
     addIndex,
     addUniqueIndex,
+    containsIndex,
+    containsUniqueIndex,
     updateIndices,
-    updateUIndices,
+    updateUniqueIndices,
     pruneIndices,
     pruneUniqueIndices
 };

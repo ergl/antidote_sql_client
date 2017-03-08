@@ -102,7 +102,7 @@ function rawInsert_Unsafe(remote, table, pkValue, mapping) {
     return kv
         .put(remote, keys, values)
         .then(_ => indices.updateIndices(remote, table, pkValue, mapping))
-        .then(_ => indices.updateUIndices(remote, table, pkValue, mapping));
+        .then(_ => indices.updateUniqueIndices(remote, table, pkValue, mapping));
 }
 
 // Given a table, and a map of updated field names to their values,
@@ -320,7 +320,7 @@ function update_Unsafe(remote, table, mapping, predicate) {
             // If any of the old rows was referenced, abort the transaction
             if (!rowsWereNotReferenced) {
                 throw new Error(
-                    `Can't updated table ${table} as it is referenced by another table`
+                    `Can't update table ${table} as it is referenced by another table`
                 );
             }
 

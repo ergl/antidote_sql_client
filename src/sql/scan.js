@@ -3,6 +3,7 @@ const utils = require('../utils');
 const kv = require('../db/kv');
 const pks = require('./meta/pks');
 const schema = require('./meta/schema');
+const indices = require('./meta/indices');
 const keyEncoding = require('../db/keyEncoding');
 
 // Given a table name, and a list of fields that make up the predicate
@@ -15,25 +16,76 @@ const keyEncoding = require('../db/keyEncoding');
 //
 // This function is unsafe. It MUST be ran inside a transaction.
 //
-// TODO: Add selections for index scans
+// TODO: Refactor
 function selectScanFn(remote, table, predicateFields) {
-    const f_containsPk = pks.containsPK(remote, table, predicateFields);
+    const f_containsUniqueIndex = indices.containsUniqueIndex(
+        remote,
+        table,
+        predicateFields
+    );
 
-    return f_containsPk.then(({ contained, pkField }) => {
+    return f_containsUniqueIndex.then(({ contained, indexRelation }) => {
         if (contained) {
+            const { index, fieldName } = chooseBestIndex(indexRelation, predicateFields);
             return function(remote, table, predicate) {
-                return scanFast(remote, table, predicate[pkField]);
+                return scanUniqueIndex(
+                    remote,
+                    table,
+                    index,
+                    fieldName,
+                    predicate[fieldName]
+                );
             };
         }
 
-        // If the predicate fields don't contain a primary key, we have to
-        // perform a sequential scan of all the keys in the table.
-        // Ideally an index should exist on a field for fast scanning.
-        // TODO: scanIndex
-        return function(remote, table, _) {
-            return scanSequential(remote, table);
-        };
+        const f_containsIndex = indices.containsIndex(remote, table, predicateFields);
+        return f_containsIndex.then(({ contained, indexRelation }) => {
+            if (contained) {
+                const { index, fieldName } = chooseBestIndex(
+                    indexRelation,
+                    predicateFields
+                );
+
+                return function(remote, table, predicate) {
+                    return scanIndex(
+                        remote,
+                        table,
+                        index,
+                        fieldName,
+                        predicate[fieldName]
+                    );
+                };
+            }
+
+            const f_containsPk = pks.containsPK(remote, table, predicateFields);
+            return f_containsPk.then(({ contained, pkField }) => {
+                if (contained) {
+                    return function(remote, table, predicate) {
+                        return scanFast(remote, table, predicate[pkField]);
+                    };
+                }
+
+                // If the predicate fields don't contain a primary key, we have to
+                // perform a sequential scan of all the keys in the table.
+                // Ideally an index should exist on a field for fast scanning.
+                return function(remote, table, _) {
+                    return scanSequential(remote, table);
+                };
+            });
+        });
     });
+}
+
+function chooseBestIndex(indexRelation, predicateFields) {
+    const bestFit = indexRelation.filter(({ field_names }) => {
+        return field_names.every(e => predicateFields.includes(e));
+    });
+
+    // TODO: Do better, assumes that there's at least one
+    const { index_name, field_names } = bestFit[0];
+    const chosenField = field_names[0];
+
+    return { index: index_name, fieldName: chosenField };
 }
 
 // Given a table name, and a range of primary keys (in the form of [start, end]),
@@ -100,8 +152,8 @@ function scanSequential(remote, table) {
 }
 
 // Given a table, the name of an index, the name of a field indexed by it,
-// and an expected value (predicate), fetch the corresponding primary keys,
-// and then fetch the appropiate tables where this field exists with that value.
+// and a list of expected values (predicate), fetch the corresponding primary keys,
+// and then fetch the appropiate tables where this field exists with any of those values.
 // This scan should be faster than both scanFast and scanSequential.
 //
 // TODO: Return early if query only wanted primary key values
@@ -111,17 +163,25 @@ function scanSequential(remote, table) {
 // only the id. If we know that only the id is used, we don't even have to make
 // a roundtrip to the database, and this scan will be free.
 //
-// TODO: Deal with values that don't exist
 function scanIndex(remote, table, index, field, value) {
-    const matchKey = keyEncoding.raw_index_field_value(table, index, field, value);
-    const matchedKeys = kv.strictSubkeyBatch(remote, matchKey);
-    const pkValues = matchedKeys.map(key => keyEncoding.getIndexData(key));
-    return fetchBatch(remote, table, pkValues);
+    const values = utils.arreturn(value);
+
+    const matchKeys = values.map(v => {
+        return keyEncoding.raw_index_field_value(table, index, field, v);
+    });
+
+    const f_allBatches = matchKeys.map(k => {
+        const matchedKeys = kv.strictSubkeyBatch(remote, k);
+        const pkValues = matchedKeys.map(keyEncoding.getIndexData);
+        return fetchBatch(remote, table, pkValues);
+    });
+
+    return Promise.all(f_allBatches).then(utils.flatten);
 }
 
 // Given a table, the name of an unique index, the name of a field indexed by it,
-// and an expected value (predicate), fetch the corresponding primary key,
-// and then fetch the appropiate table where this field exists with that value.
+// and a list of expected values (predicate), fetch the corresponding primary keys,
+// and then fetch the appropiate tables where this field exists with any of those values.
 // This scan should be faster than both scanFast and scanSequential.
 //
 // TODO: Return early if query only wanted primary key values
@@ -131,13 +191,29 @@ function scanIndex(remote, table, index, field, value) {
 // only the id. If we know that only the id is used, we only need a single roundtrip
 // instead of two.
 //
-// TODO: Deal with values that don't exist
-function scanUIndex(remote, table, index, field, value) {
-    const matchKey = keyEncoding.uindex_key(table, index, field, value);
-    const f_pkValue = kv.get(remote, matchKey);
+function scanUniqueIndex(remote, table, index, field, value) {
+    const values = utils.arreturn(value);
 
-    return f_pkValue.then(pkValue => {
-        return fetchBatch(remote, table, pkValue);
+    const matchKeys = values.map(v => {
+        return keyEncoding.uindex_key(table, index, field, v);
+    });
+
+    const f_pkValues = matchKeys.map(matchKey => {
+        // Don't throw on empty gets, this means that the given value
+        // is not in the index.
+        return kv.get(remote, matchKey, { unsafe: true });
+    });
+
+    return Promise.all(f_pkValues).then(maybeNestedpkValues => {
+        const pkValues = utils.flatten(maybeNestedpkValues);
+        // If the values were not in the index, they don't exist
+        // in the table either. (Assuming retroactive indices).
+        if (pkValues.every(e => e === null)) {
+            return Promise.resolve([]);
+        }
+
+        const f_allBatches = pkValues.map(pkValue => fetchBatch(remote, table, pkValue));
+        return Promise.all(f_allBatches).then(utils.flatten);
     });
 }
 
@@ -152,20 +228,6 @@ function fetchBatch(remote, table, pkValue) {
     return Promise.all([f_schema, f_result]).then(([schema, results]) => {
         return toRowExt(results, schema);
     });
-}
-
-// Given a list of results from a scan, and a list of field names,
-// build an object { field: value }.
-//
-// Assumes length(row) = length(field_names)
-function toRow(map, field_names) {
-    const row = utils.arreturn(map);
-    return row.reduce(
-        (acc, curr, ix) => {
-            return Object.assign(acc, { [field_names[ix]]: curr });
-        },
-        {}
-    );
 }
 
 // Given a list of results from a scan, and a list of field names,
