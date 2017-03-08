@@ -233,20 +233,6 @@ function fetchBatch(remote, table, pkValue) {
 // Given a list of results from a scan, and a list of field names,
 // build an object { field: value }.
 //
-// Assumes length(row) = length(field_names)
-function toRow(map, field_names) {
-    const row = utils.arreturn(map);
-    return row.reduce(
-        (acc, curr, ix) => {
-            return Object.assign(acc, { [field_names[ix]]: curr });
-        },
-        {}
-    );
-}
-
-// Given a list of results from a scan, and a list of field names,
-// build an object { field: value }.
-//
 // If length(row) > length(field_names), it will build multiple rows.
 // Assumes length(row) = N * length(field_names)
 // For example:
