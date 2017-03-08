@@ -320,7 +320,7 @@ function update_Unsafe(remote, table, mapping, predicate) {
             // If any of the old rows was referenced, abort the transaction
             if (!rowsWereNotReferenced) {
                 throw new Error(
-                    `Can't updated table ${table} as it is referenced by another table`
+                    `Can't update table ${table} as it is referenced by another table`
                 );
             }
 
