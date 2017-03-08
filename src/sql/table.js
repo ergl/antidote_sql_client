@@ -122,8 +122,7 @@ function checkOutFKViolation_Unsafe(remote, table, mapping) {
     const fieldNames = Object.keys(mapping);
     const f_relation = fks.correlateFKs(remote, table, fieldNames);
 
-    // TODO: Valid for now, change if primary keys are user defined, and / or when fks
-    // may point to arbitrary fields
+    // TODO: Change if primary keys are user defined, and / or when fks may point to arbitrary fields
     //
     // Foreign keys may be only created against primary keys, not arbitrary fields
     // And given that primary keys are only autoincremented, and the database is append-only
@@ -175,8 +174,7 @@ function checkOutFKViolation_Unsafe(remote, table, mapping) {
 function checkInFKViolation_Unsafe(remote, table, mapping) {
     const f_inFKs = fks.getInFKs(remote, table);
 
-    // TODO: Valid for now, change if primary keys are user defined, and / or when fks
-    // may point to arbitrary fields
+    // TODO: Change if primary keys are user defined, and / or when fks may point to arbitrary fields
     //
     // Foreign keys may be only created against primary keys, not arbitrary fields
     // And given that primary keys are only autoincremented, and the database is append-only

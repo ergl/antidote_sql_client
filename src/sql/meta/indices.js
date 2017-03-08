@@ -407,7 +407,6 @@ function pruneIndices(remote, table, fkValues, rows) {
         return pruneRowIndices(remote, table, fkValue, rows[ix]);
     });
 
-    // TODO: Is it necessary to wait here?
     return Promise.all(swaps);
 }
 
@@ -449,7 +448,6 @@ function pruneUniqueIndices(remote, table, rows) {
         return pruneRowUniqueIndices(remote, table, row);
     });
 
-    // TODO: Is it necessary to wait here?
     return Promise.all(swaps);
 }
 
