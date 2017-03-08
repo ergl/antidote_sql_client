@@ -217,6 +217,19 @@ function correlateIndices_Unsafe(remote, table_name, field_name) {
     });
 }
 
+function containsIndex(remote, table, fields) {
+    return kv.runT(remote, function(tx) {
+        const f_relation = correlateIndices(tx, table, fields);
+        return f_relation.then(relation => {
+            if (relation.length === 0) {
+                return false;
+            }
+
+            return { contained: true, indexRelation: relation };
+        });
+    });
+}
+
 // See correlateUniqueIndices_Unsafe for details.
 //
 // This function will start a new transaction by default, unless called from inside
@@ -255,6 +268,19 @@ function correlateUniqueIndices_Unsafe(remote, table_name, field_name) {
         });
 
         return Promise.all(promises);
+    });
+}
+
+function containsUniqueIndex(remote, table, fields) {
+    return kv.runT(remote, function(tx) {
+        const f_relation = correlateUniqueIndices(tx, table, fields);
+        return f_relation.then(relation => {
+            if (relation.length === 0) {
+                return false;
+            }
+
+            return { contained: true, indexRelation: relation };
+        });
     });
 }
 
@@ -452,6 +478,8 @@ function pruneRowUniqueIndices(remote, table, row) {
 module.exports = {
     addIndex,
     addUniqueIndex,
+    containsIndex,
+    containsUniqueIndex,
     updateIndices,
     updateUniqueIndices,
     pruneIndices,
