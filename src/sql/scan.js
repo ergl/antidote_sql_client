@@ -132,7 +132,7 @@ function scanIndex(remote, table, index, field, value) {
 // instead of two.
 //
 // TODO: Deal with values that don't exist
-function scanUIndex(remote, table, index, field, value) {
+function scanUniqueIndex(remote, table, index, field, value) {
     const matchKey = keyEncoding.uindex_key(table, index, field, value);
     const f_pkValue = kv.get(remote, matchKey);
 
