@@ -134,22 +134,22 @@ function setInFK(remote, table_name, fks) {
 // another transaction (given that the current API doesn't allow nested transaction).
 // In that case, all operations will be executed in the current transaction.
 //
-function correlateFKs(remote, table_name, field_names) {
+function correlateFKs(remote, tableName, fieldNames) {
     return kv.runT(remote, function(tx) {
-        return correlateFKs_Unsafe(tx, table_name, field_names);
+        return correlateFKs_Unsafe(tx, tableName, fieldNames);
     });
 }
 
 // Given a table name, and a list of field names, return a list of the foreign key structure
-// for any of the fields, in the form [ {reference_table, field_name} ].
+// for any of the fields, in the form [ {reference_table, field_name, alias} ].
 //
 // This function is unsafe. It MUST be ran inside a transaction.
 //
-function correlateFKs_Unsafe(remote, table_name, field_name) {
-    const field_names = utils.arreturn(field_name);
-    return getFKs(remote, table_name).then(fks => {
-        return fks.filter(({ field_name }) => {
-            return field_names.includes(field_name);
+function correlateFKs_Unsafe(remote, tableName, fieldName) {
+    const fieldNames = utils.arreturn(fieldName);
+    return getFKs(remote, tableName).then(fks => {
+        return fks.filter(({ alias }) => {
+            return fieldNames.includes(alias);
         });
     });
 }
