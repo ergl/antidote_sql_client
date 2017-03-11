@@ -180,11 +180,11 @@ function checkInFKViolation_Unsafe(remote, table, mapping) {
     // We can check if a specific row exists by checking it its less or equal to the keyrange
     // The actual logic for the cutoff is implemented inside select
     return f_inFKs.then(inFKs => {
-        const validChecks = inFKs.map(({ reference_table, field_name }) => {
-            // The predicate will be "WHERE field_name = OLD_FK_VALUE"
+        const validChecks = inFKs.map(({ reference_table, field_name, alias }) => {
+            // The predicate will be "WHERE alias = OLD_FK_VALUE"
             // This should return 0 rows to be value
-            const predicate = { [field_name]: mapping[field_name] };
-            const f_select = select(remote, reference_table, field_name, predicate);
+            const predicate = { [alias]: mapping[field_name] };
+            const f_select = select(remote, reference_table, alias, predicate);
 
             // In this case, a cutoff error should not happen,
             // as we're selecting a non-pk value
