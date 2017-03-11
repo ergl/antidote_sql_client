@@ -11,15 +11,15 @@ const keyEncoding = require('./../../db/keyEncoding');
 // In that case, all operations will be executed in the current transaction.
 //
 // TODO: Move this to table creation
-function addFK_T(remote, table_name, mapping) {
+function addFK_T(remote, tableName, mapping) {
     return kv.runT(remote, function(tx) {
-        return addFK_Unsafe(tx, table_name, mapping);
+        return addFK_Unsafe(tx, tableName, mapping);
     });
 }
 
-// Given a table name, and a list of maps `{field_name, reference_table}`,
+// Given a table name, and a list of maps `{alias, field_name, reference_table}`,
 // create a foreign key for every element of the map list, such that
-// `table.field_name` will be the foreign key pointing to `reference_table.field_name`
+// `table.alias` will be the foreign key pointing to `reference_table.field_name`
 //
 // Will fail if:
 // a) This table – or any of the given `reference_table`s – don't exist
@@ -31,17 +31,29 @@ function addFK_Unsafe(remote, table_name, mapping) {
     // NOTE: Assumes you can't add more than FK per field.
     // Therefore we assume that `table_mapping` doesn't contain duplicates.
     const table_mapping = utils.arreturn(mapping);
-    const reference_fields = table_mapping.map(o => o.field_name);
+
+    // If an alias is not specified, use the same name as the referenced
+    // table field name
+    const aliasedMapping = table_mapping.map(mapping => {
+        if (mapping.hasOwnProperty('alias')) {
+            return mapping;
+        }
+
+        return Object.assign(mapping, { alias: mapping.field_name });
+    });
+
+    // Get the field name for our own table
+    const aliases = aliasedMapping.map(o => o.alias);
 
     // For all reference tables, check that
     // a) it exists
     // b) the field exists in its schema
     const constraints = table_mapping.map(({ field_name, reference_table }) => {
-        return schema.validateSchemaSubset(remote, reference_table, [field_name]);
+        return schema.validateSchemaSubset(remote, reference_table, field_name);
     });
 
     // We also add the constraint that the given fields are in our schema
-    constraints.push(schema.validateSchemaSubset(remote, table_name, reference_fields));
+    constraints.push(schema.validateSchemaSubset(remote, table_name, aliases));
 
     // Check if all the constraints are satisfied
     const check = Promise.all(constraints).then(r => {
@@ -122,22 +134,22 @@ function setInFK(remote, table_name, fks) {
 // another transaction (given that the current API doesn't allow nested transaction).
 // In that case, all operations will be executed in the current transaction.
 //
-function correlateFKs(remote, table_name, field_names) {
+function correlateFKs(remote, tableName, fieldNames) {
     return kv.runT(remote, function(tx) {
-        return correlateFKs_Unsafe(tx, table_name, field_names);
+        return correlateFKs_Unsafe(tx, tableName, fieldNames);
     });
 }
 
 // Given a table name, and a list of field names, return a list of the foreign key structure
-// for any of the fields, in the form [ {reference_table, field_name} ].
+// for any of the fields, in the form [ {reference_table, field_name, alias} ].
 //
 // This function is unsafe. It MUST be ran inside a transaction.
 //
-function correlateFKs_Unsafe(remote, table_name, field_name) {
-    const field_names = utils.arreturn(field_name);
-    return getFKs(remote, table_name).then(fks => {
-        return fks.filter(({ field_name }) => {
-            return field_names.includes(field_name);
+function correlateFKs_Unsafe(remote, tableName, fieldName) {
+    const fieldNames = utils.arreturn(fieldName);
+    return getFKs(remote, tableName).then(fks => {
+        return fks.filter(({ alias }) => {
+            return fieldNames.includes(alias);
         });
     });
 }
@@ -145,5 +157,5 @@ function correlateFKs_Unsafe(remote, table_name, field_name) {
 module.exports = {
     addFK_T,
     getInFKs,
-    correlateFKs,
+    correlateFKs
 };
