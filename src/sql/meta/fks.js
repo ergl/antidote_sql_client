@@ -145,5 +145,5 @@ function correlateFKs_Unsafe(remote, table_name, field_name) {
 module.exports = {
     addFK_T,
     getInFKs,
-    correlateFKs,
+    correlateFKs
 };
