@@ -11,9 +11,9 @@ const keyEncoding = require('./../../db/keyEncoding');
 // In that case, all operations will be executed in the current transaction.
 //
 // TODO: Move this to table creation
-function addFK_T(remote, table_name, mapping) {
+function addFK_T(remote, tableName, mapping) {
     return kv.runT(remote, function(tx) {
-        return addFK_Unsafe(tx, table_name, mapping);
+        return addFK_Unsafe(tx, tableName, mapping);
     });
 }
 
