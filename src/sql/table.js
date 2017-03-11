@@ -129,8 +129,8 @@ function checkOutFKViolation_Unsafe(remote, table, mapping) {
     // We can check if a specific row exists by checking it its less or equal to the keyrange
     // The actual logic for the cutoff is implemented inside select
     return f_relation.then(relation => {
-        const validChecks = relation.map(({ reference_table, field_name }) => {
-            const range = mapping[field_name];
+        const validChecks = relation.map(({ reference_table, field_name, alias }) => {
+            const range = mapping[alias];
             // FIXME: Change if FK can be against non-primary fields
             const f_select = select(remote, reference_table, field_name, {
                 [field_name]: range
@@ -141,8 +141,7 @@ function checkOutFKViolation_Unsafe(remote, table, mapping) {
                     // FIXME: Use unique index instead
                     assert(rows.length === 1);
                     const row = rows[0];
-                    const value = row[field_name];
-                    return value === mapping[field_name];
+                    return row[field_name] === mapping[alias];
                 })
                 // TODO: Tag cutoff error
                 .catch(cutoff_error => {
