@@ -17,9 +17,9 @@ function addFK_T(remote, tableName, mapping) {
     });
 }
 
-// Given a table name, and a list of maps `{field_name, reference_table}`,
+// Given a table name, and a list of maps `{alias, field_name, reference_table}`,
 // create a foreign key for every element of the map list, such that
-// `table.field_name` will be the foreign key pointing to `reference_table.field_name`
+// `table.alias` will be the foreign key pointing to `reference_table.field_name`
 //
 // Will fail if:
 // a) This table – or any of the given `reference_table`s – don't exist
@@ -31,17 +31,29 @@ function addFK_Unsafe(remote, table_name, mapping) {
     // NOTE: Assumes you can't add more than FK per field.
     // Therefore we assume that `table_mapping` doesn't contain duplicates.
     const table_mapping = utils.arreturn(mapping);
-    const reference_fields = table_mapping.map(o => o.field_name);
+
+    // If an alias is not specified, use the same name as the referenced
+    // table field name
+    const aliasedMapping = table_mapping.map(mapping => {
+        if (mapping.hasOwnProperty('alias')) {
+            return mapping;
+        }
+
+        return Object.assign(mapping, { alias: mapping.field_name });
+    });
+
+    // Get the field name for our own table
+    const aliases = aliasedMapping.map(o => o.alias);
 
     // For all reference tables, check that
     // a) it exists
     // b) the field exists in its schema
     const constraints = table_mapping.map(({ field_name, reference_table }) => {
-        return schema.validateSchemaSubset(remote, reference_table, [field_name]);
+        return schema.validateSchemaSubset(remote, reference_table, field_name);
     });
 
     // We also add the constraint that the given fields are in our schema
-    constraints.push(schema.validateSchemaSubset(remote, table_name, reference_fields));
+    constraints.push(schema.validateSchemaSubset(remote, table_name, aliases));
 
     // Check if all the constraints are satisfied
     const check = Promise.all(constraints).then(r => {
