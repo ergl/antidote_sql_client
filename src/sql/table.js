@@ -274,6 +274,46 @@ function select_Unsafe(remote, table, fields, predicate) {
     });
 }
 
+function join(remote, fields, lTable, rTable, lField, rField = lField) {
+    return kv.runT(remote, function(tx) {
+        return join_Unsafe(tx, fields, lTable, rTable, lField, rField);
+    });
+}
+
+function join_Unsafe(remote, fields, lTable, rTable, lField, rField = lField) {
+    const f_rows = Promise.all([
+        select(remote, lTable, '*'),
+        select(remote, rTable, '*')
+    ]);
+
+    return f_rows.then(([lRows, rRows]) => {
+        const joined = innerJoin(lRows, rRows, lField, rField);
+        if (joined.length === 0) return joined;
+
+        const queriedFields = fields === '*' ? Object.keys(joined[0]) : fields;
+        return joined.map(row => {
+            return utils.filterOKeys(row, key => queriedFields.includes(key));
+        });
+    });
+}
+
+function innerJoin(lRows, rRows, lField, rField = lField) {
+    const nestedRows = lRows.map(lRow => {
+        const lval = lRow[lField];
+        const matches = rRows.filter(rRow => rRow[rField] === lval);
+        const nestedCombine = matches.map(match => combine(lRow, match, lField, rField));
+        return utils.flatten(nestedCombine);
+    });
+
+    return utils.flatten(nestedRows);
+}
+
+function combine(lrow, rrow, onl, onr = onl) {
+    const comb = Object.assign(lrow, rrow);
+    if (onl === onr) return comb;
+    return utils.filterOKeys(comb, f => f !== onr);
+}
+
 function update(remote, table, mapping, predicate) {
     return kv.runT(remote, function(tx) {
         return update_Unsafe(tx, table, mapping, predicate);
@@ -405,6 +445,7 @@ function validatePredicateFields(remote, table, field) {
 module.exports = {
     create,
     select,
+    join,
     insert,
     update
 };
