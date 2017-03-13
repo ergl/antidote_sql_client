@@ -87,6 +87,10 @@ function raw_contents(t) {
     return unwrap_js_t_list(kset.contents(t));
 }
 
+function dumpKeys(t) {
+    return raw_contents(t).map(k => ({ key: k }));
+}
+
 function wrap_changed(t) {
     return !!kset.changed(t);
 }
@@ -148,8 +152,9 @@ module.exports = {
     batch: wrap_batch,
     swap: wrap_swap,
     remove: wrap_remove,
-    contents: wrap_contents,
+    printContents: wrap_contents,
     wasChanged: wrap_changed,
+    dumpKeys,
     serialize,
     deserialize,
     serializeKey: wrap_serialize_key,

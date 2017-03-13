@@ -191,6 +191,20 @@ function removeKey({ kset }, key) {
     return orderedKeySet.remove(key, kset);
 }
 
+function reset(remote) {
+    const { kset } = remote;
+
+    const allKeys = orderedKeySet.dumpKeys(kset);
+    const allValues = [...new Array(allKeys.length)].fill(null);
+
+    const f_removeAll = put(remote, allKeys, allValues);
+    return f_removeAll.then(_ => {
+        allKeys.forEach(key => {
+            orderedKeySet.remove(key, kset);
+        });
+    });
+}
+
 module.exports = {
     createRemote,
     closeRemote,
@@ -201,5 +215,6 @@ module.exports = {
     keyBatch,
     subkeyBatch,
     strictSubkeyBatch,
-    removeKey
+    removeKey,
+    reset
 };
