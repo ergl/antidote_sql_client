@@ -442,10 +442,15 @@ function validatePredicateFields(remote, table, field) {
     });
 }
 
+function reset(remote) {
+    return kv.runT(remote, kv.reset);
+}
+
 module.exports = {
     create,
     select,
     join,
     insert,
-    update
+    update,
+    reset
 };
