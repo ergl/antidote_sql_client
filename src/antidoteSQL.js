@@ -14,5 +14,6 @@ module.exports = {
     insert: table.insert,
     select: table.select,
     join: table.join,
-    update: table.update
+    update: table.update,
+    runTransaction: kv.runT
 };
