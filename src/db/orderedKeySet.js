@@ -36,6 +36,10 @@ function unwrap_js_t_list(ml_js_t) {
     return ml_to_list(ml_js_t);
 }
 
+function empty() {
+    return kset.empty()
+}
+
 function wrap_add({ key }, t) {
     return kset.add(key, t);
 }
@@ -110,7 +114,7 @@ function deserializeKey(key) {
 }
 
 module.exports = {
-    empty: () => kset.empty(),
+    empty,
     add: wrap_add,
     subkeys: wrap_subkeys,
     strictSubKeys: wrap_strict_subkeys,
