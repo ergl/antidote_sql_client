@@ -33,9 +33,20 @@ function abortT(remote) {
     return remote.abort();
 }
 
-function read_set(remote) {
-    const set_key = keyEncoding.set_key();
-    const ref = generateRef(remote, set_key);
+function readSet(remote) {
+    const f_allSets = readSummary({ remote });
+    return f_allSets.then(allSets => {
+        const all = allSets.map(({ tableName, setKey }) => {
+            const f_set = readSingleSet(remote, setKey);
+            return f_set.then(set => ({ tableName, set }));
+        });
+
+        return Promise.all(all);
+    });
+}
+
+function readSingleSet(remote, setKey) {
+    const ref = generateRef(remote, setKey);
     return ref.read().then(v => {
         if (v === null) {
             return orderedKeySet.empty();
@@ -45,14 +56,22 @@ function read_set(remote) {
     });
 }
 
-function write_needed({ kset }) {
-    return orderedKeySet.wasChanged(kset);
+function writeSet({ remote, kset }) {
+    const all = kset.map(({ tableName, set }) => {
+        return writeSingleSet(remote, { tableName, set });
+    });
+
+    return Promise.all(all);
 }
 
-function write_set({ remote, kset }) {
-    const set_key = keyEncoding.set_key();
-    const ref = generateRef(remote, set_key);
-    const ser = orderedKeySet.serialize(kset);
+function writeSingleSet(remote, { tableName, set }) {
+    if (!orderedKeySet.wasChanged(set)) {
+        return Promise.resolve([]);
+    }
+
+    const setKey = keyEncoding.generateSetKey(tableName);
+    const ref = generateRef(remote, setKey);
+    const ser = orderedKeySet.serialize(set);
     return remote.update(ref.set(ser));
 }
 
@@ -78,15 +97,11 @@ function runT(remote, fn) {
     }
 
     const runnable = tx_handle => {
-        return read_set(tx_handle)
+        return readSet(tx_handle)
             .then(set => ({ remote: tx_handle, kset: set }))
             .then(tx => {
                 const f_result = fn(tx).then(result => {
-                    if (!write_needed(tx)) {
-                        return result;
-                    }
-
-                    return write_set(tx).then(_ => result);
+                    return writeSet(tx).then(_ => result);
                 });
 
                 return f_result.then(result => {
@@ -116,7 +131,7 @@ function put({ remote, kset }, key, value) {
     const ops = refs.map((r, i) => r.set(values[i]));
     // If put is successful, add the keys to the kset
     return remote.update(ops).then(ct => {
-        keys.forEach(key => orderedKeySet.add(key, kset));
+        keys.forEach(key => addKey(kset, key));
         return ct;
     });
 }
@@ -189,28 +204,43 @@ function generateRef(remote, key) {
     return remote.register(key);
 }
 
+function addKey(kset, key) {
+    const table = keyEncoding.keyBucket(key);
+    const { set } = kset.find(({ tableName }) => tableName === table);
+    return orderedKeySet.add(key, set);
+}
+
 function subkeyBatch({ kset }, table, key) {
-    return orderedKeySet.subkeys(key, kset);
+    const { set } = kset.find(({ tableName }) => tableName === table);
+    return orderedKeySet.subkeys(key, set);
 }
 
 function strictSubkeyBatch({ kset }, table, key) {
-    return orderedKeySet.strictSubkeys(key, kset);
+    const { set } = kset.find(({ tableName }) => tableName === table);
+    return orderedKeySet.strictSubkeys(key, set);
 }
 
 function removeKey({ kset }, table, key) {
-    return orderedKeySet.remove(key, kset);
+    const { set } = kset.find(({ tableName }) => tableName === table);
+    return orderedKeySet.remove(key, set);
 }
 
 function reset(remote) {
     const { kset } = remote;
 
-    const allKeys = orderedKeySet.dumpKeys(kset);
-    const allValues = [...new Array(allKeys.length)].fill(null);
+    const allSets = kset.map(({ set }) => set);
+    const allKeys = allSets.map(set => ({ set, keys: orderedKeySet.dumpKeys(set) }));
+    const allValues = allKeys.map(({ keys }) => {
+        return [...new Array(keys.length)].fill(null);
+    });
 
-    const f_removeAll = put(remote, allKeys, allValues);
-    return f_removeAll.then(_ => {
-        allKeys.forEach(key => {
-            orderedKeySet.remove(key, kset);
+    const f_removeAll = allKeys.map(({ keys }, ix) => {
+        return put(remote, keys, allValues[ix]);
+    });
+
+    return Promise.all(f_removeAll).then(_ => {
+        allKeys.forEach(({ set, keys }) => {
+            keys.forEach(key => orderedKeySet.remove(key, set));
         });
     });
 }

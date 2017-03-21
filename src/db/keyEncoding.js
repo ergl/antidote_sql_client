@@ -3,17 +3,17 @@ const kset = require('kset');
 const SET_KEY = 'ML_KSET';
 const SUMMARY_KEY = '$$__SUMMARY__$$';
 
-function set_key() {
-    return SET_KEY;
-}
-
 function generateSetKey(tableName) {
-    const encode = new Buffer(tableName).toString('base64');
-    return '$$__' + encode + '__' + SET_KEY + '__$$';
+    const encoded = Buffer.from(tableName).toString('base64');
+    return '$$__' + encoded + '__' + SET_KEY + '__$$';
 }
 
 function summaryKey() {
     return SUMMARY_KEY;
+}
+
+function keyBucket({ key }) {
+    return kset.table_from_key(key);
 }
 
 function wrap_table(t) {
@@ -65,8 +65,8 @@ function getIndexData({ key }) {
 }
 
 module.exports = {
-    set_key,
     summaryKey,
+    keyBucket,
     generateSetKey,
     table: wrap_table,
     spk: wrap_spk,
