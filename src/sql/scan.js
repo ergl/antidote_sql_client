@@ -127,7 +127,7 @@ function scanFast(remote, table, pkValue) {
             const keyBatch = utils.flatten(
                 pkValues.map(pkValue => {
                     const rootKey = keyEncoding.spk(table, pkValue);
-                    return kv.subkeyBatch(remote, rootKey);
+                    return kv.subkeyBatch(remote, table, rootKey);
                 })
             );
 
@@ -143,7 +143,7 @@ function scanSequential(remote, table) {
     const f_schema = schema.getSchema(remote, table);
 
     const rootKey = keyEncoding.table(table);
-    const keys = kv.subkeyBatch(remote, rootKey).filter(keyEncoding.isData);
+    const keys = kv.subkeyBatch(remote, table, rootKey).filter(keyEncoding.isData);
     return kv.get(remote, keys).then(values => {
         return f_schema.then(schema => {
             return toRowExt(values, schema);
@@ -171,7 +171,7 @@ function scanIndex(remote, table, index, field, value) {
     });
 
     const f_allBatches = matchKeys.map(k => {
-        const matchedKeys = kv.strictSubkeyBatch(remote, k);
+        const matchedKeys = kv.strictSubkeyBatch(remote, table, k);
         const pkValues = matchedKeys.map(keyEncoding.getIndexData);
         return fetchBatch(remote, table, pkValues);
     });
@@ -220,7 +220,7 @@ function scanUniqueIndex(remote, table, index, field, value) {
 function fetchBatch(remote, table, pkValue) {
     const pkValues = utils.arreturn(pkValue);
     const pks = pkValues.map(k => keyEncoding.spk(table, k));
-    const keyBatch = utils.flatten(pks.map(pk => kv.subkeyBatch(remote, pk)));
+    const keyBatch = utils.flatten(pks.map(pk => kv.subkeyBatch(remote, table, pk)));
 
     const f_schema = schema.getSchema(remote, table);
     const f_result = kv.get(remote, keyBatch);

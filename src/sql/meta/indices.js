@@ -427,17 +427,17 @@ function pruneRowIndices(remote, table, fkValue, row) {
                 fieldValues
             );
 
-            kv.removeKey(remote, indexKey);
+            kv.removeKey(remote, table, indexKey);
             return sentinel;
         });
 
         const sentinelKeys = utils.flatten(nested_sentinelKeys);
         sentinelKeys.forEach(sentinel => {
-            const subkeys = kv.strictSubkeyBatch(remote, sentinel);
+            const subkeys = kv.strictSubkeyBatch(remote, table, sentinel);
             // If the sentinel key still has any subkeys, don't remove it
             // We need the sentinel key for index scans
             if (subkeys.length === 0) {
-                kv.removeKey(remote, sentinel);
+                kv.removeKey(remote, table, sentinel);
             }
         });
     });
@@ -468,7 +468,7 @@ function pruneRowUniqueIndices(remote, table, row) {
 
         const keys = utils.flatten(nested_keys);
         keys.forEach(key => {
-            kv.removeKey(remote, key);
+            kv.removeKey(remote, table, key);
         });
     });
 }

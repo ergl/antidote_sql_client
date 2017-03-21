@@ -189,15 +189,15 @@ function generateRef(remote, key) {
     return remote.register(key);
 }
 
-function subkeyBatch({ kset }, key) {
+function subkeyBatch({ kset }, table, key) {
     return orderedKeySet.subkeys(key, kset);
 }
 
-function strictSubkeyBatch({ kset }, key) {
+function strictSubkeyBatch({ kset }, table, key) {
     return orderedKeySet.strictSubkeys(key, kset);
 }
 
-function removeKey({ kset }, key) {
+function removeKey({ kset }, table, key) {
     return orderedKeySet.remove(key, kset);
 }
 
