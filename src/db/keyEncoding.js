@@ -1,9 +1,19 @@
 const kset = require('kset');
 
-const SET_KEY = '$$__ML_KSET__$$';
+const SET_KEY = 'ML_KSET';
+const SUMMARY_KEY = '$$__SUMMARY__$$';
 
 function set_key() {
     return SET_KEY;
+}
+
+function generateSetKey(tableName) {
+    const encode = new Buffer(tableName).toString('base64');
+    return '$$__' + encode + '__' + SET_KEY + '__$$';
+}
+
+function summaryKey() {
+    return SUMMARY_KEY;
 }
 
 function wrap_table(t) {
@@ -56,6 +66,8 @@ function getIndexData({ key }) {
 
 module.exports = {
     set_key,
+    summaryKey,
+    generateSetKey,
     table: wrap_table,
     spk: wrap_spk,
     field: wrap_field,

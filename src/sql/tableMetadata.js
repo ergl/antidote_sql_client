@@ -1,4 +1,5 @@
 const kv = require('./../db/kv');
+const summary = require('./summary');
 const keyEncoding = require('./../db/keyEncoding');
 
 function createMeta(remote, table_name, pk_field, schema) {
@@ -14,7 +15,9 @@ function createMeta(remote, table_name, pk_field, schema) {
     };
 
     return kv.runT(remote, function(tx) {
-        return kv.put(tx, meta_key, meta_content);
+        return kv
+            .put(tx, meta_key, meta_content)
+            .then(_ => summary.addTable(tx, table_name));
     });
 }
 

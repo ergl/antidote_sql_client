@@ -56,6 +56,20 @@ function write_set({ remote, kset }) {
     return remote.update(ref.set(ser));
 }
 
+function readSummary({ remote }) {
+    const summaryKey = keyEncoding.summaryKey();
+    const ref = generateRef(remote, summaryKey);
+    return ref.read().then(v => {
+        return v === null ? [] : v;
+    });
+}
+
+function writeSummary({ remote }, summary) {
+    const summaryKey = keyEncoding.summaryKey();
+    const ref = generateRef(remote, summaryKey);
+    return remote.update(ref.set(summary));
+}
+
 function runT(remote, fn) {
     // If the given remote is a transaction handle,
     // execute the function with the current one.
@@ -202,6 +216,8 @@ function reset(remote) {
 }
 
 module.exports = {
+    readSummary,
+    writeSummary,
     createRemote,
     closeRemote,
     runT,
