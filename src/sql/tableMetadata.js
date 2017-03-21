@@ -1,5 +1,5 @@
 const kv = require('./../db/kv');
-const summary = require('./summary');
+const summary = require('./../db/summary');
 const keyEncoding = require('./../db/keyEncoding');
 
 function createMeta(remote, table_name, pk_field, schema) {

@@ -1,5 +1,5 @@
-const kv = require('./../db/kv');
-const keyEncoding = require('./../db/keyEncoding');
+const kv = require('./kv');
+const keyEncoding = require('./keyEncoding');
 
 function addTable(remote, tableName) {
     return kv.runT(remote, function(tx) {
