@@ -13,17 +13,11 @@ function createMeta(remote, table_name, pk_field, schema) {
         primary_key_field: pk_field
     };
 
-    // TODO: Run in a single tx
-    // The problem is that the kset hasn't been updated with
-    // the summary by the time we get to the `put` part.
-    // Could update manuall the tx.kset in this case
-    return kv
-        .runT(remote, function(tx) {
-            return updateSummary(tx, table_name);
-        })
-        .then(_ => kv.runT(remote, function(tx) {
-            return kv.put(tx, meta_key, meta_content);
-        }));
+    return kv.runT(remote, function(tx) {
+        return updateSummary(tx, table_name)
+            .then(_ => kv.populateSet(tx))
+            .then(tx => kv.put(tx, meta_key, meta_content));
+    });
 }
 
 function updateSummary(remote, tableName) {

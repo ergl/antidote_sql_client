@@ -33,6 +33,18 @@ function abortT(remote) {
     return remote.abort();
 }
 
+function populateSet(txHandle) {
+    return readSet(txHandle.remote).then(setList => {
+        const oldSets = txHandle.kset;
+        oldSets.forEach(set => {
+            if (!setList.find(elt => elt === set)) {
+                setList.push(set);
+            }
+        });
+        return Object.assign(txHandle, { kset: setList });
+    });
+}
+
 function readSet(remote) {
     const f_allSets = readSummary({ remote });
     return f_allSets.then(allSets => {
@@ -248,6 +260,7 @@ function reset(remote) {
 module.exports = {
     readSummary,
     writeSummary,
+    populateSet,
     createRemote,
     closeRemote,
     runT,
