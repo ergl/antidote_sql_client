@@ -36,22 +36,12 @@ function unwrap_js_t_list(ml_js_t) {
     return ml_to_list(ml_js_t);
 }
 
+function empty() {
+    return kset.empty()
+}
+
 function wrap_add({ key }, t) {
     return kset.add(key, t);
-}
-
-function wrap_find({ key }, t) {
-    const found = kset.find(key, t);
-    if (found === undefined) return found;
-    return { key: found };
-}
-
-function wrap_next({ key }, t) {
-    return kset.next_key(key, t);
-}
-
-function wrap_prev({ key }, t) {
-    return kset.prev_key(key, t);
 }
 
 function wrap_subkeys(key, t) {
@@ -63,16 +53,6 @@ function wrap_strict_subkeys({ key }, t) {
     return unwrap_js_t_list(kset.subkeys(key, t)).map(key => {
         return { key };
     });
-}
-
-function wrap_batch(ini, fin, t) {
-    return unwrap_js_t_list(kset.batch(ini.key, fin.key, t)).map(key => {
-        return { key };
-    });
-}
-
-function wrap_swap({ key: oldKey }, { key: newKey }, t) {
-    return kset.swap(oldKey, newKey, t);
 }
 
 function wrap_remove({ key }, t) {
@@ -99,10 +79,6 @@ function serialize(t) {
     return raw_contents(t).map(serializeKey);
 }
 
-function wrap_serialize_key({ key }) {
-    return serializeKey(key);
-}
-
 function serializeKey(key) {
     return Object.keys(key).reduce(
         (acc, curr) => {
@@ -126,10 +102,6 @@ function deserialize(ser) {
     return empt;
 }
 
-function wrap_deserialize_key(ser) {
-    return { key: deserializeKey(ser) };
-}
-
 function deserializeKey(key) {
     return Object.keys(key).reduce(
         (acc, curr) => {
@@ -142,21 +114,14 @@ function deserializeKey(key) {
 }
 
 module.exports = {
-    empty: () => kset.empty(),
+    empty,
     add: wrap_add,
-    find: wrap_find,
-    next_key: wrap_next,
-    prev_key: wrap_prev,
     subkeys: wrap_subkeys,
     strictSubKeys: wrap_strict_subkeys,
-    batch: wrap_batch,
-    swap: wrap_swap,
     remove: wrap_remove,
     printContents: wrap_contents,
     wasChanged: wrap_changed,
     dumpKeys,
     serialize,
-    deserialize,
-    serializeKey: wrap_serialize_key,
-    deserializeKey: wrap_deserialize_key
+    deserialize
 };
