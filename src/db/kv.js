@@ -180,7 +180,7 @@ function subkeyBatch({ kset }, key) {
 }
 
 function strictSubkeyBatch({ kset }, key) {
-    return orderedKeySet.strictSubKeys(key, kset);
+    return orderedKeySet.strictSubkeys(key, kset);
 }
 
 function removeKey({ kset }, key) {
