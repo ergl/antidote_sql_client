@@ -21,6 +21,7 @@ const antidoteSQL = require('antidote_sql_client');
 const conn = antidoteSQL.connect(8087, '127.0.0.1');
 
 // Create a new table
+// NOTE: The first field will be chosen as the primary key
 antidoteSQL.createTable(conn, "employee", [
     "empId",
     "name",
