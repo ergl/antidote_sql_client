@@ -2,6 +2,8 @@
 
 (For a restricted SQL-like interface on top of javascript).
 
+Some explanations about the current architecture can be found in [architecture.md](./architecture.md).
+
 ### Limitations
 
 - Only supports auto-increment keys
