@@ -106,6 +106,10 @@ antidoteSQL.select(conn, 'employee', '*')
 //     username: "anotherUsername",
 //     department: 1 } ]
 
+// Translates to
+// SELECT name, lastName
+//   FROM employee
+//  WHERE name IN ("John", "Sally") AND department = 1
 antidoteSQL.select(conn, 'employee', ['name', 'lastName'], {
     name: ["John", "Sally"],
     department: 1
