@@ -106,6 +106,13 @@ antidoteSQL.select(conn, 'employee', '*')
 //     username: "anotherUsername",
 //     department: 1 } ]
 
+antidoteSQL.select(conn, 'employee', ['name', 'lastName'], {
+    name: ["John", "Sally"],
+    department: 1
+})
+// Returns:
+// [ { name: "John", lastName: "Doe" }, { name: "Sally", lastName: "Mann" }]
+
 // Joins
 // Translates to
 // SELECT *
