@@ -274,9 +274,9 @@ function select_Unsafe(remote, table, fields, predicate) {
     });
 }
 
-function join(remote, fields, lTable, rTable, lField, rField = lField) {
+function join(remote, fields, tables, onFields) {
     return kv.runT(remote, function(tx) {
-        return join_Unsafe(tx, fields, lTable, rTable, lField, rField);
+        return join_Unsafe(tx, fields, tables, onFields);
     });
 }
 
