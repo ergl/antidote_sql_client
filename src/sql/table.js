@@ -280,19 +280,20 @@ function join(remote, fields, lTable, rTable, lField, rField = lField) {
     });
 }
 
-function join_Unsafe(remote, fields, lTable, rTable, lField, rField = lField) {
-    const f_rows = Promise.all([
-        select(remote, lTable, '*').then(r => prefixTableName(lTable, r)),
-        select(remote, rTable, '*').then(r => prefixTableName(rTable, r))
-    ]);
+function join_Unsafe(remote, fields, tables, onField) {
+    const onFields = validateJoinPredicate(tables, onField);
+    const prefixedFields = onFields.map((f, ix) => prefixField(tables[ix], f));
 
-    return f_rows.then(([lRows, rRows]) => {
-        const joined = innerJoin(
-            lRows,
-            rRows,
-            prefixField(lTable, lField),
-            prefixField(rTable, rField)
-        );
+    // Get all tables and prefix them
+    // TODO: Don't fetch all fields, just the ones we need
+    const gatherAll = tables.map(table => {
+        return select(remote, table, '*').then(r => prefixTableName(table, r));
+    });
+
+    const f_rows = Promise.all(gatherAll);
+
+    return f_rows.then(allRows => {
+        const joined = multiInnerJoin(allRows, prefixedFields);
 
         if (joined.length === 0) {
             return joined;
@@ -313,6 +314,23 @@ function join_Unsafe(remote, fields, lTable, rTable, lField, rField = lField) {
     });
 }
 
+function validateJoinPredicate(tables, onField) {
+    const onFields = utils.arreturn(onField);
+
+    if (onFields.length !== tables.length) {
+        if (onFields.length === 1) {
+            // Make all fields the same if the user only specifies one
+            return [...new Array(tables.length)].fill(onField);
+        } else {
+            throw new Error(
+                `join: Wrong number of predicate fields. Expected ${tables.length}, got ${onFields.length}`
+            );
+        }
+    }
+
+    return onFields;
+}
+
 function prefixTableName(tableName, row) {
     const rows = utils.arreturn(row);
     return rows.map(row => {
@@ -325,6 +343,11 @@ function prefixField(tableName, field) {
     return tableName + prefix + field;
 }
 
+// Given two lists of rows, and two fields,
+// perform an inner join on them such that all the
+// field entries are equal
+// innerJoin([{foo: "a", bar: "b"}], [{foo: "a", baz: "c"}], 'foo', 'foo')
+// => [ { foo: "a", bar: "b", baz: "c" } ]
 function innerJoin(lRows, rRows, lField, rField) {
     const nestedRows = lRows.map(lRow => {
         const lval = lRow[lField];
@@ -334,6 +357,18 @@ function innerJoin(lRows, rRows, lField, rField) {
     });
 
     return utils.flatten(nestedRows);
+}
+
+// Same as innerJoin, but for an arbitrary number of tables
+// Assumes at least two lists of rows and an equal number of fields
+function multiInnerJoin(nestedRows, onFields) {
+    const [first, ...rest] = nestedRows;
+    return rest.reduce(
+        (acc, curr, ix) => {
+            return innerJoin(acc, curr, onFields[ix], onFields[ix + 1]);
+        },
+        first
+    );
 }
 
 function combine(lrow, rrow, onl, onr = onl) {
