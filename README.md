@@ -126,18 +126,18 @@ antidoteSQL.select(conn, 'employee', ['name', 'lastName'], {
 //  WHERE employee.department = department.depId
 antidoteSQL.join(conn, '*', 'employee', 'department', 'department', 'depId');
 // Returns:
-// [ { empId: 1,
-//     name: "John",
-//     lastName: "Doe",
-//     userName: "someUsername",
-//     department: 1,
-//     departmentName: "sales" },
-//   { empId: 2,
-//     name: "Sally",
-//     lastName: "Mann",
-//     username: "anotherUsername",
-//     department: 1,
-//     departmentName: "sales" } ]
+// [ { employee$empId: 1,
+//     employee$name: "John",
+//     employee$lastName: "Doe",
+//     employee$userName: "someUsername",
+//     employee$department: 1,
+//     department$departmentName: "sales" },
+//   { employee$empId: 2,
+//     employee$name: "Sally",
+//     employee$lastName: "Mann",
+//     employee$username: "anotherUsername",
+//     employee$department: 1,
+//     department$departmentName: "sales" } ]
 
 // Updates
 // Translates to
