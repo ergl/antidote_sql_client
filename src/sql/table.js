@@ -274,20 +274,28 @@ function select_Unsafe(remote, table, fields, predicate) {
     });
 }
 
-function join(remote, fields, tables, onFields) {
+function join(remote, fields, tables, predicate) {
     return kv.runT(remote, function(tx) {
-        return join_Unsafe(tx, fields, tables, onFields);
+        return join_Unsafe(tx, fields, tables, predicate);
     });
 }
 
-function join_Unsafe(remote, fields, tables, onField) {
-    const onFields = validateJoinPredicate(tables, onField);
+// predicate:
+// { using: [a.field, b.field], (interpreted as where a.field = b.field, ...
+//   [table]: { [table.field]: value (same as any select predicate)
+// }
+function join_Unsafe(remote, fields, tables, predicate) {
+    const validPredicate = validateBetterJoinPredicate(tables, predicate);
+    const onFields = validPredicate.using;
     const prefixedFields = onFields.map((f, ix) => prefixField(tables[ix], f));
 
     // Get all tables and prefix them
     // TODO: Don't fetch all fields, just the ones we need
     const gatherAll = tables.map(table => {
-        return select(remote, table, '*').then(r => prefixTableName(table, r));
+        const tablePredicate = predicate[table];
+        return select(remote, table, '*', tablePredicate).then(r => {
+            return prefixTableName(table, r);
+        });
     });
 
     const f_rows = Promise.all(gatherAll);
@@ -314,7 +322,18 @@ function join_Unsafe(remote, fields, tables, onField) {
     });
 }
 
-function validateJoinPredicate(tables, onField) {
+function validateBetterJoinPredicate(tables, predicate) {
+    const joinFields = predicate['using'];
+    if (joinFields === undefined) {
+        throw new Error(
+            `join: Wrong predicate on ${tables}. Remember to use a 'using' predicate`
+        );
+    }
+
+    return Object.assign(predicate, { using: validateJoinFields(tables, joinFields) });
+}
+
+function validateJoinFields(tables, onField) {
     const onFields = utils.arreturn(onField);
 
     if (onFields.length !== tables.length) {
@@ -339,7 +358,7 @@ function prefixTableName(tableName, row) {
 }
 
 function prefixField(tableName, field) {
-    const prefix = '$';
+    const prefix = '.';
     return tableName + prefix + field;
 }
 
