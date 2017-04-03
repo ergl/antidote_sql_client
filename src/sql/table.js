@@ -339,7 +339,7 @@ function prefixTableName(tableName, row) {
 }
 
 function prefixField(tableName, field) {
-    const prefix = '$';
+    const prefix = '.';
     return tableName + prefix + field;
 }
 
