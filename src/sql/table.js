@@ -282,22 +282,50 @@ function join(remote, fields, lTable, rTable, lField, rField = lField) {
 
 function join_Unsafe(remote, fields, lTable, rTable, lField, rField = lField) {
     const f_rows = Promise.all([
-        select(remote, lTable, '*'),
-        select(remote, rTable, '*')
+        select(remote, lTable, '*').then(r => prefixTableName(lTable, r)),
+        select(remote, rTable, '*').then(r => prefixTableName(rTable, r))
     ]);
 
     return f_rows.then(([lRows, rRows]) => {
-        const joined = innerJoin(lRows, rRows, lField, rField);
-        if (joined.length === 0) return joined;
+        const joined = innerJoin(
+            lRows,
+            rRows,
+            prefixField(lTable, lField),
+            prefixField(rTable, rField)
+        );
 
-        const queriedFields = fields === '*' ? Object.keys(joined[0]) : fields;
+        if (joined.length === 0) {
+            return joined;
+        }
+
+        let queriedFields;
+        if (fields === '*') {
+            // If asking for all, pick all the fields
+            // from the first entry—it doesn't matter
+            queriedFields = Object.keys(joined[0]);
+        } else {
+            queriedFields = fields;
+        }
+
         return joined.map(row => {
             return utils.filterOKeys(row, key => queriedFields.includes(key));
         });
     });
 }
 
-function innerJoin(lRows, rRows, lField, rField = lField) {
+function prefixTableName(tableName, row) {
+    const rows = utils.arreturn(row);
+    return rows.map(row => {
+        return utils.mapOKeys(row, key => prefixField(tableName, key));
+    });
+}
+
+function prefixField(tableName, field) {
+    const prefix = '$';
+    return tableName + prefix + field;
+}
+
+function innerJoin(lRows, rRows, lField, rField) {
     const nestedRows = lRows.map(lRow => {
         const lval = lRow[lField];
         const matches = rRows.filter(rRow => rRow[rField] === lval);
