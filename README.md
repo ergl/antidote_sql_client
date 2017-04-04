@@ -77,7 +77,7 @@ antidoteSQL.insert(conn, 'employee', {
 
 // Selects
 
-// select(conn, t, [f1, f2, ..., fn], predicate) will perform
+// select(conn, [f1, f2, ..., fn], t, predicate) will perform
 // SELECT f1, f2, ..., fn FROM t where predicate = true
 //
 // The syntax for the predicate is
@@ -92,10 +92,10 @@ antidoteSQL.insert(conn, 'employee', {
 //
 // Currently we do not support OR between different fields (like A = B OR C = D).
 //
-// Supports for wildard select by calling `select(_, _, '*', _)`
+// Supports for wildard select by calling `select(_, '*', _, _)`
 // If no predicate is used, it will scan the whole table.
 
-antidoteSQL.select(conn, 'employee', '*')
+antidoteSQL.select(conn, '*', 'employee')
 // Returns:
 // [ { empId: 1,
 //     name: "John",
@@ -112,7 +112,7 @@ antidoteSQL.select(conn, 'employee', '*')
 // SELECT name, lastName
 //   FROM employee
 //  WHERE name IN ("John", "Sally") AND department = 1
-antidoteSQL.select(conn, 'employee', ['name', 'lastName'], {
+antidoteSQL.select(conn, ['name', 'lastName'], 'employee', {
     name: ["John", "Sally"],
     department: 1
 })
