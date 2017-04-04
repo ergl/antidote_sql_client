@@ -281,12 +281,6 @@ function select_Unsafe(remote, fields, table, predicate) {
     });
 }
 
-function join(remote, fields, tables, predicate) {
-    return kv.runT(remote, function(tx) {
-        return join_Unsafe(tx, fields, tables, predicate);
-    });
-}
-
 // predicate:
 // { using: [a.field, b.field], (interpreted as where a.field = b.field, ...
 //   [table]: { [table.field]: value (same as any select predicate)
@@ -538,7 +532,6 @@ function reset(remote) {
 module.exports = {
     create,
     select,
-    join,
     insert,
     update,
     reset
