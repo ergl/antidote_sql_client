@@ -282,7 +282,7 @@ function join(remote, fields, tables, predicate) {
 //   [table]: { [table.field]: value (same as any select predicate)
 // }
 function join_Unsafe(remote, fields, tables, predicate) {
-    const validPredicate = validateBetterJoinPredicate(tables, predicate);
+    const validPredicate = validateJoinPredicate(tables, predicate);
     const onFields = validPredicate.using;
     const prefixedFields = onFields.map((f, ix) => prefixField(tables[ix], f));
 
@@ -319,7 +319,7 @@ function join_Unsafe(remote, fields, tables, predicate) {
     });
 }
 
-function validateBetterJoinPredicate(tables, predicate) {
+function validateJoinPredicate(tables, predicate) {
     const joinFields = predicate['using'];
     if (joinFields === undefined) {
         throw new Error(
