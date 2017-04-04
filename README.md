@@ -148,6 +148,19 @@ antidoteSQL.select(conn, '*', ['employee', 'department'], {
 //  WHERE empId = 1
 antidoteSQL.update(conn, 'employee', { userName: "aRealUserName" }, { empId: 1 });
 
+// You can also operate on old values, by simply passing a function
+// Translates to
+//
+// SELECT userName
+//   FROM employee
+//     AS previousName
+//  WHERE empId = 1
+//
+// UPDATE employee
+//    SET userName = "not" || previousName (postgres syntax for string concatenation)
+//  WHERE empId = 1
+antidoteSQL.update(conn, 'employee', { userName: previousName => "not" + previousName }, { empId: 1 });
+
 // Close connection
 antidoteSQL.close(conn)
 ```
