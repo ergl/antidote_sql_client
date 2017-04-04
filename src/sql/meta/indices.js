@@ -176,7 +176,7 @@ function fieldsOfUniqueIndex(remote, table_name, index_name) {
     });
 }
 
-// See correlateIndices_Unsafe for details.
+// See internalCorrelateIndices for details.
 //
 // This function will start a new transaction by default, unless called from inside
 // another transaction (given that the current API doesn't allow nested transaction).
@@ -184,7 +184,7 @@ function fieldsOfUniqueIndex(remote, table_name, index_name) {
 //
 function correlateIndices(remote, table_name, field_names) {
     return kv.runT(remote, function(tx) {
-        return correlateIndices_Unsafe(tx, table_name, field_names);
+        return internalCorrelateIndices(tx, table_name, field_names);
     });
 }
 
@@ -196,7 +196,7 @@ function correlateIndices(remote, table_name, field_names) {
 //
 // This function is unsafe. It MUST be ran inside a transaction.
 //
-function correlateIndices_Unsafe(remote, table_name, field_name) {
+function internalCorrelateIndices(remote, table_name, field_name) {
     const field_names = utils.arreturn(field_name);
 
     const promises = field_names.map(f => indexOfField(remote, table_name, f));
@@ -230,7 +230,7 @@ function containsIndex(remote, table, fields) {
     });
 }
 
-// See correlateUniqueIndices_Unsafe for details.
+// See internalCorrelateUniqueIndices for details.
 //
 // This function will start a new transaction by default, unless called from inside
 // another transaction (given that the current API doesn't allow nested transaction).
@@ -238,7 +238,7 @@ function containsIndex(remote, table, fields) {
 //
 function correlateUniqueIndices(remote, table_name, field_names) {
     return kv.runT(remote, function(tx) {
-        return correlateUniqueIndices_Unsafe(tx, table_name, field_names);
+        return internalCorrelateUniqueIndices(tx, table_name, field_names);
     });
 }
 
@@ -250,7 +250,7 @@ function correlateUniqueIndices(remote, table_name, field_names) {
 //
 // This function is unsafe. It MUST be ran inside a transaction.
 //
-function correlateUniqueIndices_Unsafe(remote, table_name, field_name) {
+function internalCorrelateUniqueIndices(remote, table_name, field_name) {
     const field_names = utils.arreturn(field_name);
 
     const promises = field_names.map(f => uniqueIndexOfField(remote, table_name, f));

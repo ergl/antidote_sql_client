@@ -4,16 +4,16 @@ const schema = require('./schema');
 const kv = require('./../../db/kv');
 const keyEncoding = require('./../../db/keyEncoding');
 
-// See addFK_Unsafe for details.
+// See internalAddFK for details.
 //
 // This function will start a new transaction by default, unless called from inside
 // another transaction (given that the current API doesn't allow nested transaction).
 // In that case, all operations will be executed in the current transaction.
 //
 // TODO: Move this to table creation
-function addFK_T(remote, tableName, mapping) {
+function createFK(remote, tableName, mapping) {
     return kv.runT(remote, function(tx) {
-        return addFK_Unsafe(tx, tableName, mapping);
+        return internalAddFK(tx, tableName, mapping);
     });
 }
 
@@ -27,7 +27,7 @@ function addFK_T(remote, tableName, mapping) {
 //
 // This function is unsafe. It MUST be ran inside a transaction.
 //
-function addFK_Unsafe(remote, table_name, mapping) {
+function internalAddFK(remote, table_name, mapping) {
     // NOTE: Assumes you can't add more than FK per field.
     // Therefore we assume that `table_mapping` doesn't contain duplicates.
     const table_mapping = utils.arreturn(mapping);
@@ -128,7 +128,7 @@ function setInFK(remote, table_name, fks) {
     });
 }
 
-// See correlateFKs_Unsafe for details.
+// See internalCorrelateFKs for details.
 //
 // This function will start a new transaction by default, unless called from inside
 // another transaction (given that the current API doesn't allow nested transaction).
@@ -136,7 +136,7 @@ function setInFK(remote, table_name, fks) {
 //
 function correlateFKs(remote, tableName, fieldNames) {
     return kv.runT(remote, function(tx) {
-        return correlateFKs_Unsafe(tx, tableName, fieldNames);
+        return internalCorrelateFKs(tx, tableName, fieldNames);
     });
 }
 
@@ -145,7 +145,7 @@ function correlateFKs(remote, tableName, fieldNames) {
 //
 // This function is unsafe. It MUST be ran inside a transaction.
 //
-function correlateFKs_Unsafe(remote, tableName, fieldName) {
+function internalCorrelateFKs(remote, tableName, fieldName) {
     const fieldNames = utils.arreturn(fieldName);
     return getFKs(remote, tableName).then(fks => {
         return fks.filter(({ alias }) => {
@@ -155,7 +155,7 @@ function correlateFKs_Unsafe(remote, tableName, fieldName) {
 }
 
 module.exports = {
-    addFK_T,
+    createFK,
     getInFKs,
     correlateFKs
 };

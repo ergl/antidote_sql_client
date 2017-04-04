@@ -24,7 +24,7 @@ function create(remote, name, schema) {
     return tableMetadata.createMeta(remote, name, pk_field, [pk_field, ...rest]);
 }
 
-// See insertInto_Unsafe for details.
+// See internalInsert for details.
 //
 // This function will start a new transaction by default, unless called from inside
 // another transaction (given that the current API doesn't allow nested transaction).
@@ -32,7 +32,7 @@ function create(remote, name, schema) {
 //
 function insert(remote, name, mapping) {
     return kv.runT(remote, function(tx) {
-        return insertInto_Unsafe(tx, name, mapping);
+        return internalInsert(tx, name, mapping);
     });
 }
 
@@ -48,7 +48,7 @@ function insert(remote, name, mapping) {
 //
 // This function is unsafe. It MUST be ran inside a transaction.
 //
-function insertInto_Unsafe(remote, table, mapping) {
+function internalInsert(remote, table, mapping) {
     // 1 - Check schema is correct. If it's not, throw
     // 2 - Get new pk value by reading the meta keyrange (incrAndGet)
     // 3 - Inside a transaction:
@@ -70,15 +70,15 @@ function insertInto_Unsafe(remote, table, mapping) {
             // TODO: Add bottom value for nullable fields
             return schema.validateSchema(remote, table, insertFields).then(r => {
                 if (!r) throw new Error('Invalid schema');
-                return checkOutFKViolation_Unsafe(remote, table, mapping);
+                return checkOutFKViolation(remote, table, mapping);
             });
         })
         .then(valid => {
             if (!valid) throw new Error('FK constraint failed');
-            return pks.fetchAddPrimaryKey_T(remote, table);
+            return pks.fetchAddPrimaryKey(remote, table);
         })
         .then(pk_value => {
-            return rawInsert_Unsafe(remote, table, pk_value, mapping);
+            return rawInsert(remote, table, pk_value, mapping);
         });
 }
 
@@ -90,7 +90,7 @@ function insertInto_Unsafe(remote, table, mapping) {
 //
 // This function is unsafe. It MUST be ran inside a transaction.
 //
-function rawInsert_Unsafe(remote, table, pkValue, mapping) {
+function rawInsert(remote, table, pkValue, mapping) {
     const fieldNames = Object.keys(mapping);
     const pkKey = keyEncoding.spk(table, pkValue);
     const fieldKeys = fieldNames.map(f => keyEncoding.field(table, pkValue, f));
@@ -118,7 +118,7 @@ function rawInsert_Unsafe(remote, table, pkValue, mapping) {
 //
 // This function is unsafe. It MUST be ran inside a transaction.
 //
-function checkOutFKViolation_Unsafe(remote, table, mapping) {
+function checkOutFKViolation(remote, table, mapping) {
     const fieldNames = Object.keys(mapping);
     const f_relation = fks.correlateFKs(remote, table, fieldNames);
 
@@ -170,7 +170,7 @@ function checkOutFKViolation_Unsafe(remote, table, mapping) {
 // Assumptions: Given that FK can only be placed on primary keys,
 // we don't have to check that the new value is repeated, as that is asserted by
 // the current `update` behaviour. We only need to check that the old value is not being used
-function checkInFKViolation_Unsafe(remote, table, mapping) {
+function checkInFKViolation(remote, table, mapping) {
     const f_inFKs = fks.getInFKs(remote, table);
 
     // TODO: Change if primary keys are user defined, and / or when fks may point to arbitrary fields
@@ -213,13 +213,13 @@ function internalDispatchSelect(remote, field, table, predicate) {
     // If we're querying more than one table, use an implicit
     // inner join between all of them.
     if (Array.isArray(table)) {
-        return join_Unsafe(remote, field, table, predicate);
+        return internalJoin(remote, field, table, predicate);
     }
 
-    return select_Unsafe(remote, field, table, predicate);
+    return internalSelect(remote, field, table, predicate);
 }
 
-// select_Unsafe(_, [f1, f2, ..., fn], t, predicate) will perform
+// internalSelect(_, [f1, f2, ..., fn], t, predicate) will perform
 // SELECT f1, f2, ..., fn FROM t where predicate = true
 //
 // The syntax for the predicate is
@@ -234,13 +234,13 @@ function internalDispatchSelect(remote, field, table, predicate) {
 //
 // Currently we do not support OR between different fields (like A = B OR C = D).
 //
-// Supports for wildard select by calling `select_Unsafe(_, '*', _, _)`
+// Supports for wildard select by calling `internalSelect(_, '*', _, _)`
 //
 // Will fail if any of the given fields is not part of the table schema.
 //
 // This function is unsafe. It MUST be ran inside a transaction.
 //
-function select_Unsafe(remote, fields, table, predicate) {
+function internalSelect(remote, fields, table, predicate) {
     const f_validPredicate = validatePredicate(remote, table, predicate);
 
     const f_predicateFields = f_validPredicate.then(Object.keys);
@@ -285,7 +285,7 @@ function select_Unsafe(remote, fields, table, predicate) {
 // { using: [a.field, b.field], (interpreted as where a.field = b.field, ...
 //   [table]: { [table.field]: value (same as any select predicate)
 // }
-function join_Unsafe(remote, fields, tables, predicate) {
+function internalJoin(remote, fields, tables, predicate) {
     const validPredicate = validateJoinPredicate(tables, predicate);
     const onFields = validPredicate.using;
     const prefixedFields = onFields.map((f, ix) => prefixField(tables[ix], f));
@@ -399,11 +399,11 @@ function combine(lrow, rrow, onl, onr = onl) {
 
 function update(remote, table, mapping, predicate) {
     return kv.runT(remote, function(tx) {
-        return update_Unsafe(tx, table, mapping, predicate);
+        return internalUpdate(tx, table, mapping, predicate);
     });
 }
 
-function update_Unsafe(remote, table, mapping, predicate) {
+function internalUpdate(remote, table, mapping, predicate) {
     const queriedFields = Object.keys(mapping);
 
     const f_pkNotPresent = pks.containsPK(remote, table, queriedFields);
@@ -423,7 +423,7 @@ function update_Unsafe(remote, table, mapping, predicate) {
             // Check if any of the affected rows is being referenced by another table
             const f_rowsWereNotReferenced = f_oldRows.then(oldRows => {
                 const f_checks = oldRows.map(oldRow => {
-                    return checkInFKViolation_Unsafe(remote, table, oldRow);
+                    return checkInFKViolation(remote, table, oldRow);
                 });
 
                 return Promise.all(f_checks).then(checks => {
@@ -457,14 +457,14 @@ function update_Unsafe(remote, table, mapping, predicate) {
                 // if Y exists in the parent column.
                 // This will check that the new row satisifies this point
                 // If it violates the guarantee, abort the transaction
-                const validFKs = checkOutFKViolation_Unsafe(remote, table, row);
+                const validFKs = checkOutFKViolation(remote, table, row);
 
                 return validFKs.then(valid => {
                     if (!valid) throw new Error('FK constraint failed');
 
                     const pkValue = row[pkField];
                     const mapping = utils.filterOKeys(row, k => k !== pkField);
-                    return rawInsert_Unsafe(remote, table, pkValue, mapping);
+                    return rawInsert(remote, table, pkValue, mapping);
                 });
             });
 

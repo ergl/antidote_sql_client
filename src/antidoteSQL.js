@@ -8,7 +8,7 @@ module.exports = {
     reset: table.reset,
     close: kv.closeRemote,
     createTable: table.create,
-    createFK: fks.addFK_T,
+    createFK: fks.createFK,
     createIndex: indices.addIndex,
     createUniqueIndex: indices.addUniqueIndex,
     insert: table.insert,
