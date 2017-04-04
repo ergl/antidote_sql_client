@@ -150,7 +150,9 @@ antidoteSQL.update(conn, "employee", {
     userName: "aRealUserName"
 }, { empId: 1 })
 
-// You can also operate on old values, by simply passing a function
+// You can also operate on old values, by using a function.
+// NOTE: Use with caution. Everyone will judge you if you do nasty things here.
+//
 // Translates to
 //
 // SELECT userName
