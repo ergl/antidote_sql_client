@@ -445,9 +445,16 @@ function internalUpdate(remote, table, mapping, predicate) {
             }
 
             const updatedRows = oldRows.map(oldRow => {
-                return utils.mapO(oldRow, (k, v) => {
-                    const vp = queriedFields.includes(k) ? mapping[k] : v;
-                    return { [k]: vp };
+                return utils.mapO(oldRow, (k, oldValue) => {
+                    let newValue;
+                    if (queriedFields.includes(k)) {
+                        const update = mapping[k];
+                        // We might pass a function that receives the old value
+                        newValue = utils.isFunction(update) ? update(oldValue) : update;
+                    } else {
+                        newValue = oldValue;
+                    }
+                    return { [k]: newValue };
                 });
             });
 
