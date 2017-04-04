@@ -230,9 +230,6 @@ function select(remote, fields, table, predicate) {
 //
 // This function is unsafe. It MUST be ran inside a transaction.
 //
-// FIXME: Revisit WHERE once JOINS are implemented
-// Detect indexed fields and scan the index instead.
-// We would need JOIN to support that.
 function select_Unsafe(remote, fields, table, predicate) {
     const f_validPredicate = validatePredicate(remote, table, predicate);
 
