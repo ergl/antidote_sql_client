@@ -181,7 +181,7 @@ transaction, if any. To chain together operations, one must
 do so with promises. Like so:
 
 ```js
-const conn = antidoteSQL.connect(8087, "127.0.0.1");
+const conn = antidoteSQL.connect(8087, "127.0.0.1")
 
 antidoteSQL.createTable(remote, "sampleTable", [
       "tableId",
@@ -190,11 +190,11 @@ antidoteSQL.createTable(remote, "sampleTable", [
     return antidoteSQL.createIndex(remote, "sampleTable", {
         index_name: "someIndex",
         field_names: "tableFieldA"
-    });
+    })
 }).then(_ => {
     return antidoteSQL.insert(remote, "sampleTable", {
         tableFieldA: "someValue"
-    });
+    })
 })
 ```
 
@@ -207,7 +207,7 @@ it as soon as the callback finishes. If any error is thrown inside
 this function, the transaction will be aborted.
 
 ```js
-const conn = antidoteSQL.connect(8087, '127.0.0.1');
+const conn = antidoteSQL.connect(8087, "127.0.0.1")
 
 antidoteSQL.runTransaction(conn, tx => {
     return antidoteSQL.createTable(tx, "tableFoo", [
@@ -219,7 +219,7 @@ antidoteSQL.runTransaction(conn, tx => {
             "barId",
             "barA",
             "barB"
-        ]);
+        ])
     })
-});
+})
 ```
