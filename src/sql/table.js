@@ -197,7 +197,7 @@ function checkInFKViolation_Unsafe(remote, table, mapping) {
     });
 }
 
-// See select_Unsafe for details.
+// See dispatchSelect for details.
 //
 // This function will start a new transaction by default, unless called from inside
 // another transaction (given that the current API doesn't allow nested transaction).
@@ -205,8 +205,18 @@ function checkInFKViolation_Unsafe(remote, table, mapping) {
 //
 function select(remote, fields, table, predicate) {
     return kv.runT(remote, function(tx) {
-        return select_Unsafe(tx, fields, table, predicate);
+        return dispatchSelect(tx, fields, table, predicate);
     });
+}
+
+function dispatchSelect(remote, field, table, predicate) {
+    // If we're querying more than one table, use an implicit
+    // inner join between all of them.
+    if (Array.isArray(table)) {
+        return join_Unsafe(remote, field, table, predicate);
+    }
+
+    return select_Unsafe(remote, field, table, predicate);
 }
 
 // select_Unsafe(_, [f1, f2, ..., fn], t, predicate) will perform
