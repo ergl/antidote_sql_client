@@ -75,7 +75,7 @@ function internalInsert(remote, table, mapping) {
         })
         .then(valid => {
             if (!valid) throw new Error('FK constraint failed');
-            return pks.fetchAddPrimaryKey_T(remote, table);
+            return pks.fetchAddPrimaryKey(remote, table);
         })
         .then(pk_value => {
             return rawInsert(remote, table, pk_value, mapping);

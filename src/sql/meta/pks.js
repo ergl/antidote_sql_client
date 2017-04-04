@@ -28,7 +28,7 @@ function getPKField(remote, table_name) {
 //
 // In that case, all operations will be executed in the current transaction.
 //
-function fetchAddPrimaryKey_T(remote, table_name) {
+function fetchAddPrimaryKey(remote, table_name) {
     return kv.runT(remote, function(tx) {
         return incrKey(tx, table_name).then(_ => getCurrentKey(tx, table_name));
     });
@@ -73,5 +73,5 @@ module.exports = {
     containsPK,
     getPKField,
     getCurrentKey,
-    fetchAddPrimaryKey_T
+    fetchAddPrimaryKey
 };
