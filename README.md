@@ -17,10 +17,10 @@ Some explanations about the current architecture can be found in [architecture.m
 ### Usage
 
 ```js
-const antidoteSQL = require('antidote_sql_client');
+const antidoteSQL = require("antidote_sql_client")
 
 // Open a connection
-const conn = antidoteSQL.connect(8087, '127.0.0.1');
+const conn = antidoteSQL.connect(8087, "127.0.0.1")
 
 // Create a new table
 // NOTE: The first field will be chosen as the primary key
@@ -32,10 +32,10 @@ antidoteSQL.createTable(conn, "employee", [
     "department"
 ])
 
-antidoteSQL.createTable(conn, 'department', [
-    'depId',
-    'departmentName'
-]);
+antidoteSQL.createTable(conn, "department", [
+    "depId",
+    "departmentName"
+])
 
 // Create a foreign key
 antidoteSQL.createFK(conn, "employee", {
@@ -45,30 +45,30 @@ antidoteSQL.createFK(conn, "employee", {
 })
 
 // Create a new index
-antidoteSQL.createIndex(conn, 'employee', {
-    index_name: 'employee_name',
-    field_names: 'name'
+antidoteSQL.createIndex(conn, "employee", {
+    index_name: "employee_name",
+    field_names: "name"
 })
 
 // Create a new unique index
-antidoteSQL.createUniqueIndex(conn, 'employee', {
-    index_name: 'employee_username',
-    field_names: 'username'
+antidoteSQL.createUniqueIndex(conn, "employee", {
+    index_name: "employee_username",
+    field_names: "username"
 })
 
 // Inserts
-antidoteSQL.insert(conn, 'department', {
-    departmentName: 'sales'
+antidoteSQL.insert(conn, "department", {
+    departmentName: "sales"
 })
 
-antidoteSQL.insert(conn, 'employee', {
+antidoteSQL.insert(conn, "employee", {
     username: "someUsername",
     name: "John",
     lastName: "Doe",
     department: 1
 })
 
-antidoteSQL.insert(conn, 'employee', {
+antidoteSQL.insert(conn, "employee", {
     username: "anotherUsername",
     name: "Sally",
     lastName: "Mann",
@@ -84,18 +84,18 @@ antidoteSQL.insert(conn, 'employee', {
 // { field_a: (value | values), field_b: (value | values), ...}
 //
 // This translates to
-// SELECT [...]
-//   FROM [...]
+// SELECT f1, f2, ..., fn
+//   FROM t
 //  WHERE
-//   field_a = value | field_a = value_1 OR value_2 OR ...
+//   ( field_a = value | field_a = value_1 OR value_2 OR ...)
 //   [AND field_b = value | field_b = value_1 OR value_2 OR ...]
 //
 // Currently we do not support OR between different fields (like A = B OR C = D).
 //
-// Supports for wildard select by calling `select(_, '*', _, _)`
+// Supports for wildard select by using "*" instead of a field array.
 // If no predicate is used, it will scan the whole table.
 
-antidoteSQL.select(conn, '*', 'employee')
+antidoteSQL.select(conn, "*", "employee")
 // Returns:
 // [ { empId: 1,
 //     name: "John",
@@ -112,7 +112,7 @@ antidoteSQL.select(conn, '*', 'employee')
 // SELECT name, lastName
 //   FROM employee
 //  WHERE name IN ("John", "Sally") AND department = 1
-antidoteSQL.select(conn, ['name', 'lastName'], 'employee', {
+antidoteSQL.select(conn, ["name", "lastName"], "employee", {
     name: ["John", "Sally"],
     department: 1
 })
@@ -124,9 +124,9 @@ antidoteSQL.select(conn, ['name', 'lastName'], 'employee', {
 // SELECT *
 //   FROM employee, department
 //  WHERE employee.department = department.depId
-antidoteSQL.select(conn, '*', ['employee', 'department'], {
-    using: ['department', 'depId']
-});
+antidoteSQL.select(conn, "*", ["employee", "department"], {
+    using: ["department", "depId"]
+})
 // Returns:
 // [ { employee.empId: 1,
 //     employee.name: "John",
@@ -146,7 +146,9 @@ antidoteSQL.select(conn, '*', ['employee', 'department'], {
 // UPDATE employee
 //    SET userName = aRealUserName
 //  WHERE empId = 1
-antidoteSQL.update(conn, 'employee', { userName: "aRealUserName" }, { empId: 1 });
+antidoteSQL.update(conn, "employee", {
+    userName: "aRealUserName"
+}, { empId: 1 })
 
 // You can also operate on old values, by simply passing a function
 // Translates to
@@ -159,7 +161,9 @@ antidoteSQL.update(conn, 'employee', { userName: "aRealUserName" }, { empId: 1 }
 // UPDATE employee
 //    SET userName = "not" || previousName (postgres syntax for string concatenation)
 //  WHERE empId = 1
-antidoteSQL.update(conn, 'employee', { userName: previousName => "not" + previousName }, { empId: 1 });
+antidoteSQL.update(conn, "employee", {
+    userName: previousName => "not" + previousName
+}, { empId: 1 })
 
 // Close connection
 antidoteSQL.close(conn)
