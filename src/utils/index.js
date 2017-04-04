@@ -87,6 +87,10 @@ function filterO(obj, fn) {
     );
 }
 
+function isFunction(fn) {
+    return typeof fn === 'function';
+}
+
 module.exports = {
     squash,
     flatten,
@@ -95,5 +99,6 @@ module.exports = {
     mapOKeys,
     mapOValues,
     filterO,
-    filterOKeys
+    filterOKeys,
+    isFunction
 };
