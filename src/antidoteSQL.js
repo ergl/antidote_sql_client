@@ -13,7 +13,6 @@ module.exports = {
     createUniqueIndex: indices.addUniqueIndex,
     insert: table.insert,
     select: table.select,
-    join: table.join,
     update: table.update,
     runTransaction: kv.runT
 };

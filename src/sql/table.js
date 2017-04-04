@@ -197,7 +197,7 @@ function checkInFKViolation_Unsafe(remote, table, mapping) {
     });
 }
 
-// See select_Unsafe for details.
+// See internalDispatchSelect for details.
 //
 // This function will start a new transaction by default, unless called from inside
 // another transaction (given that the current API doesn't allow nested transaction).
@@ -205,8 +205,18 @@ function checkInFKViolation_Unsafe(remote, table, mapping) {
 //
 function select(remote, fields, table, predicate) {
     return kv.runT(remote, function(tx) {
-        return select_Unsafe(tx, fields, table, predicate);
+        return internalDispatchSelect(tx, fields, table, predicate);
     });
+}
+
+function internalDispatchSelect(remote, field, table, predicate) {
+    // If we're querying more than one table, use an implicit
+    // inner join between all of them.
+    if (Array.isArray(table)) {
+        return join_Unsafe(remote, field, table, predicate);
+    }
+
+    return select_Unsafe(remote, field, table, predicate);
 }
 
 // select_Unsafe(_, [f1, f2, ..., fn], t, predicate) will perform
@@ -271,18 +281,12 @@ function select_Unsafe(remote, fields, table, predicate) {
     });
 }
 
-function join(remote, fields, tables, predicate) {
-    return kv.runT(remote, function(tx) {
-        return join_Unsafe(tx, fields, tables, predicate);
-    });
-}
-
 // predicate:
 // { using: [a.field, b.field], (interpreted as where a.field = b.field, ...
 //   [table]: { [table.field]: value (same as any select predicate)
 // }
 function join_Unsafe(remote, fields, tables, predicate) {
-    const validPredicate = validateBetterJoinPredicate(tables, predicate);
+    const validPredicate = validateJoinPredicate(tables, predicate);
     const onFields = validPredicate.using;
     const prefixedFields = onFields.map((f, ix) => prefixField(tables[ix], f));
 
@@ -319,7 +323,7 @@ function join_Unsafe(remote, fields, tables, predicate) {
     });
 }
 
-function validateBetterJoinPredicate(tables, predicate) {
+function validateJoinPredicate(tables, predicate) {
     const joinFields = predicate['using'];
     if (joinFields === undefined) {
         throw new Error(
@@ -528,7 +532,6 @@ function reset(remote) {
 module.exports = {
     create,
     select,
-    join,
     insert,
     update,
     reset
