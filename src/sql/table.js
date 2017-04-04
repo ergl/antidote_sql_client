@@ -132,7 +132,7 @@ function checkOutFKViolation_Unsafe(remote, table, mapping) {
         const validChecks = relation.map(({ reference_table, field_name, alias }) => {
             const range = mapping[alias];
             // FIXME: Change if FK can be against non-primary fields
-            const f_select = select(remote, reference_table, field_name, {
+            const f_select = select(remote, field_name, reference_table, {
                 [field_name]: range
             });
 
@@ -184,7 +184,7 @@ function checkInFKViolation_Unsafe(remote, table, mapping) {
             // The predicate will be "WHERE alias = OLD_FK_VALUE"
             // This should return 0 rows to be value
             const predicate = { [alias]: mapping[field_name] };
-            const f_select = select(remote, reference_table, alias, predicate);
+            const f_select = select(remote, alias, reference_table, predicate);
 
             // In this case, a cutoff error should not happen,
             // as we're selecting a non-pk value
@@ -203,13 +203,13 @@ function checkInFKViolation_Unsafe(remote, table, mapping) {
 // another transaction (given that the current API doesn't allow nested transaction).
 // In that case, all operations will be executed in the current transaction.
 //
-function select(remote, table, fields, predicate) {
+function select(remote, fields, table, predicate) {
     return kv.runT(remote, function(tx) {
-        return select_Unsafe(tx, table, fields, predicate);
+        return select_Unsafe(tx, fields, table, predicate);
     });
 }
 
-// select_Unsafe(_, t, [f1, f2, ..., fn], predicate) will perform
+// select_Unsafe(_, [f1, f2, ..., fn], t, predicate) will perform
 // SELECT f1, f2, ..., fn FROM t where predicate = true
 //
 // The syntax for the predicate is
@@ -224,7 +224,7 @@ function select(remote, table, fields, predicate) {
 //
 // Currently we do not support OR between different fields (like A = B OR C = D).
 //
-// Supports for wildard select by calling `select_Unsafe(_, _, '*', _)`
+// Supports for wildard select by calling `select_Unsafe(_, '*', _, _)`
 //
 // Will fail if any of the given fields is not part of the table schema.
 //
@@ -233,7 +233,7 @@ function select(remote, table, fields, predicate) {
 // FIXME: Revisit WHERE once JOINS are implemented
 // Detect indexed fields and scan the index instead.
 // We would need JOIN to support that.
-function select_Unsafe(remote, table, fields, predicate) {
+function select_Unsafe(remote, fields, table, predicate) {
     const f_validPredicate = validatePredicate(remote, table, predicate);
 
     const f_predicateFields = f_validPredicate.then(Object.keys);
@@ -293,7 +293,7 @@ function join_Unsafe(remote, fields, tables, predicate) {
     // TODO: Don't fetch all fields, just the ones we need
     const gatherAll = tables.map(table => {
         const tablePredicate = predicate[table];
-        return select(remote, table, '*', tablePredicate).then(r => {
+        return select(remote, '*', table, tablePredicate).then(r => {
             return prefixTableName(table, r);
         });
     });
@@ -417,7 +417,7 @@ function update_Unsafe(remote, table, mapping, predicate) {
                 );
             }
 
-            const f_oldRows = select(remote, table, '*', predicate);
+            const f_oldRows = select(remote, '*', table, predicate);
 
             // Check if any of the affected rows is being referenced by another table
             const f_rowsWereNotReferenced = f_oldRows.then(oldRows => {
