@@ -11,7 +11,7 @@ const keyEncoding = require('./../../db/keyEncoding');
 // In that case, all operations will be executed in the current transaction.
 //
 // TODO: Move this to table creation
-function addFK_T(remote, tableName, mapping) {
+function createFK(remote, tableName, mapping) {
     return kv.runT(remote, function(tx) {
         return internalAddFK(tx, tableName, mapping);
     });
@@ -155,7 +155,7 @@ function internalCorrelateFKs(remote, tableName, fieldName) {
 }
 
 module.exports = {
-    addFK_T,
+    createFK,
     getInFKs,
     correlateFKs
 };
