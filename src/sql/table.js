@@ -118,8 +118,8 @@ function rawInsert(remote, table, pkValue, mapping) {
 //
 // This function is unsafe. It MUST be ran inside a transaction.
 //
-function checkOutFKViolation(remote, table, mapping) {
-    const fieldNames = Object.keys(mapping);
+function checkOutFKViolation(remote, table, newRow) {
+    const fieldNames = Object.keys(newRow);
     const f_relation = fks.correlateFKs(remote, table, fieldNames);
 
     // TODO: Change if primary keys are user defined, and / or when fks may point to arbitrary fields
@@ -130,7 +130,7 @@ function checkOutFKViolation(remote, table, mapping) {
     // The actual logic for the cutoff is implemented inside select
     return f_relation.then(relation => {
         const validChecks = relation.map(({ reference_table, field_name, alias }) => {
-            const range = mapping[alias];
+            const range = newRow[alias];
             // FIXME: Change if FK can be against non-primary fields
             const f_select = select(remote, field_name, reference_table, {
                 [field_name]: range
@@ -141,7 +141,7 @@ function checkOutFKViolation(remote, table, mapping) {
                     // FIXME: Use unique index instead
                     assert(rows.length === 1);
                     const row = rows[0];
-                    return row[field_name] === mapping[alias];
+                    return row[field_name] === newRow[alias];
                 })
                 // TODO: Tag cutoff error
                 .catch(cutoff_error => {
