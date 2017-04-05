@@ -67,14 +67,15 @@ function internalAddFK(remote, table_name, mapping) {
             return setFK(remote, table_name, fk_tuples.concat(table_mapping));
         });
 
-        const f_infks = table_mapping.map(({ reference_table }) => {
-            return getInFKs(remote, reference_table).then(fk_tuples => {
-                const in_fk_mapping = utils.mapO(mapping, (k, v) => {
+        const f_infks = table_mapping.map(fkMap => {
+            const referencedTable = fkMap.reference_table;
+            return getInFKs(remote, referencedTable).then(fk_tuples => {
+                const in_fk_mapping = utils.mapO(fkMap, (k, v) => {
                     return {
                         [k]: k === 'reference_table' ? table_name : v
                     };
                 });
-                return setInFK(remote, reference_table, fk_tuples.concat(in_fk_mapping));
+                return setInFK(remote, referencedTable, fk_tuples.concat(in_fk_mapping));
             });
         });
 
