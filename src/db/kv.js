@@ -254,6 +254,8 @@ function reset(remote) {
         allKeys.forEach(({ set, keys }) => {
             keys.forEach(key => orderedKeySet.remove(key, set));
         });
+
+        return writeSummary(remote, null);
     });
 }
 
