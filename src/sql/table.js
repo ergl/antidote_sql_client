@@ -290,6 +290,9 @@ function internalSelect(remote, fields, table, predicate) {
 // { using: [a.field, b.field], (interpreted as where a.field = b.field, ...
 //   [table]: { [table.field]: value (same as any select predicate)
 // }
+// TODO: Support new predicate structure for `using`:
+// using: [['tableA.fieldA', 'tableB.fieldB'], ['tableB.fieldB2', 'tableC.fieldC']]
+// meaning WHERE tableA.fieldA = tableB.fieldB AND tableB.fieldB2 = tableC.fieldC
 function internalJoin(remote, fields, tables, predicate) {
     const validPredicate = validateJoinPredicate(tables, predicate);
     const onFields = validPredicate.using;
