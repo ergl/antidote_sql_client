@@ -27,19 +27,19 @@ function createFK(remote, tableName, mapping) {
 //
 // This function is unsafe. It MUST be ran inside a transaction.
 //
-function internalAddFK(remote, table_name, mapping) {
+function internalAddFK(remote, tableName, fkMap) {
     // NOTE: Assumes you can't add more than FK per field.
-    // Therefore we assume that `table_mapping` doesn't contain duplicates.
-    const table_mapping = utils.arreturn(mapping);
+    // Therefore we assume that `fkMaps` doesn't contain duplicates.
+    const fkMaps = utils.arreturn(fkMap);
 
     // If an alias is not specified, use the same name as the referenced
     // table field name
-    const aliasedMapping = table_mapping.map(mapping => {
-        if (mapping.hasOwnProperty('alias')) {
-            return mapping;
+    const aliasedMapping = fkMaps.map(fkMap => {
+        if (fkMap.hasOwnProperty('alias')) {
+            return fkMap;
         }
 
-        return Object.assign(mapping, { alias: mapping.field_name });
+        return Object.assign(fkMap, { alias: fkMap.field_name });
     });
 
     // Get the field name for our own table
@@ -48,12 +48,12 @@ function internalAddFK(remote, table_name, mapping) {
     // For all reference tables, check that
     // a) it exists
     // b) the field exists in its schema
-    const constraints = table_mapping.map(({ field_name, reference_table }) => {
+    const constraints = fkMaps.map(({ field_name, reference_table }) => {
         return schema.validateSchemaSubset(remote, reference_table, field_name);
     });
 
     // We also add the constraint that the given fields are in our schema
-    constraints.push(schema.validateSchemaSubset(remote, table_name, aliases));
+    constraints.push(schema.validateSchemaSubset(remote, tableName, aliases));
 
     // Check if all the constraints are satisfied
     const check = Promise.all(constraints).then(r => {
@@ -63,19 +63,19 @@ function internalAddFK(remote, table_name, mapping) {
     return check.then(r => {
         if (!r) throw new Error("Can't add fk on non-existent field");
 
-        const f_outfk = getFKs(remote, table_name).then(fk_tuples => {
-            return setFK(remote, table_name, fk_tuples.concat(table_mapping));
+        const f_outfk = getFKs(remote, tableName).then(fkTuples => {
+            return setFK(remote, tableName, fkTuples.concat(fkMaps));
         });
 
-        const f_infks = table_mapping.map(fkMap => {
+        const f_infks = fkMaps.map(fkMap => {
             const referencedTable = fkMap.reference_table;
-            return getInFKs(remote, referencedTable).then(fk_tuples => {
-                const in_fk_mapping = utils.mapO(fkMap, (k, v) => {
+            return getInFKs(remote, referencedTable).then(fkTuples => {
+                const inFKMapping = utils.mapO(fkMap, (k, v) => {
                     return {
-                        [k]: k === 'reference_table' ? table_name : v
+                        [k]: k === 'reference_table' ? tableName : v
                     };
                 });
-                return setInFK(remote, referencedTable, fk_tuples.concat(in_fk_mapping));
+                return setInFK(remote, referencedTable, fkTuples.concat(inFKMapping));
             });
         });
 
