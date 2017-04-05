@@ -118,8 +118,8 @@ function rawInsert(remote, table, pkValue, mapping) {
 //
 // This function is unsafe. It MUST be ran inside a transaction.
 //
-function checkOutFKViolation(remote, table, mapping) {
-    const fieldNames = Object.keys(mapping);
+function checkOutFKViolation(remote, table, newRow) {
+    const fieldNames = Object.keys(newRow);
     const f_relation = fks.correlateFKs(remote, table, fieldNames);
 
     // TODO: Change if primary keys are user defined, and / or when fks may point to arbitrary fields
@@ -130,7 +130,7 @@ function checkOutFKViolation(remote, table, mapping) {
     // The actual logic for the cutoff is implemented inside select
     return f_relation.then(relation => {
         const validChecks = relation.map(({ reference_table, field_name, alias }) => {
-            const range = mapping[alias];
+            const range = newRow[alias];
             // FIXME: Change if FK can be against non-primary fields
             const f_select = select(remote, field_name, reference_table, {
                 [field_name]: range
@@ -141,7 +141,7 @@ function checkOutFKViolation(remote, table, mapping) {
                     // FIXME: Use unique index instead
                     assert(rows.length === 1);
                     const row = rows[0];
-                    return row[field_name] === mapping[alias];
+                    return row[field_name] === newRow[alias];
                 })
                 // TODO: Tag cutoff error
                 .catch(cutoff_error => {
@@ -170,7 +170,7 @@ function checkOutFKViolation(remote, table, mapping) {
 // Assumptions: Given that FK can only be placed on primary keys,
 // we don't have to check that the new value is repeated, as that is asserted by
 // the current `update` behaviour. We only need to check that the old value is not being used
-function checkInFKViolation(remote, table, mapping) {
+function checkInFKViolation(remote, table, oldRow, fieldsToUpdate) {
     const f_inFKs = fks.getInFKs(remote, table);
 
     // TODO: Change if primary keys are user defined, and / or when fks may point to arbitrary fields
@@ -181,9 +181,14 @@ function checkInFKViolation(remote, table, mapping) {
     // The actual logic for the cutoff is implemented inside select
     return f_inFKs.then(inFKs => {
         const validChecks = inFKs.map(({ reference_table, field_name, alias }) => {
+            // If the update doesn't concern a referenced field, skip
+            if (!fieldsToUpdate.includes(field_name)) {
+                return true;
+            }
+
             // The predicate will be "WHERE alias = OLD_FK_VALUE"
             // This should return 0 rows to be value
-            const predicate = { [alias]: mapping[field_name] };
+            const predicate = { [alias]: oldRow[field_name] };
             const f_select = select(remote, alias, reference_table, predicate);
 
             // In this case, a cutoff error should not happen,
@@ -404,9 +409,9 @@ function update(remote, table, mapping, predicate) {
 }
 
 function internalUpdate(remote, table, mapping, predicate) {
-    const queriedFields = Object.keys(mapping);
+    const fieldsToUpdate = Object.keys(mapping);
 
-    const f_pkNotPresent = pks.containsPK(remote, table, queriedFields);
+    const f_pkNotPresent = pks.containsPK(remote, table, fieldsToUpdate);
 
     return f_pkNotPresent
         // Check if trying to update a primary key
@@ -423,7 +428,7 @@ function internalUpdate(remote, table, mapping, predicate) {
             // Check if any of the affected rows is being referenced by another table
             const f_rowsWereNotReferenced = f_oldRows.then(oldRows => {
                 const f_checks = oldRows.map(oldRow => {
-                    return checkInFKViolation(remote, table, oldRow);
+                    return checkInFKViolation(remote, table, oldRow, fieldsToUpdate);
                 });
 
                 return Promise.all(f_checks).then(checks => {
@@ -447,7 +452,7 @@ function internalUpdate(remote, table, mapping, predicate) {
             const updatedRows = oldRows.map(oldRow => {
                 return utils.mapO(oldRow, (k, oldValue) => {
                     let newValue;
-                    if (queriedFields.includes(k)) {
+                    if (fieldsToUpdate.includes(k)) {
                         const update = mapping[k];
                         // We might pass a function that receives the old value
                         newValue = utils.isFunction(update) ? update(oldValue) : update;
