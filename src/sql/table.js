@@ -298,7 +298,7 @@ function internalJoin(remote, fields, tables, predicate) {
     // Get all tables and prefix them
     // TODO: Don't fetch all fields, just the ones we need
     const gatherAll = tables.map(table => {
-        const tablePredicate = predicate[table];
+        const tablePredicate = validPredicate[table];
         return select(remote, '*', table, tablePredicate).then(r => {
             return prefixTableName(table, r);
         });
@@ -484,10 +484,21 @@ function internalUpdate(remote, table, mapping, predicate) {
 
             return Promise.all(f_inserts)
                 .then(_ => {
-                    return indices.pruneIndices(remote, table, fkValues, oldRows);
+                    return indices.pruneIndices(
+                        remote,
+                        table,
+                        fkValues,
+                        oldRows,
+                        fieldsToUpdate
+                    );
                 })
                 .then(_ => {
-                    return indices.pruneUniqueIndices(remote, table, oldRows);
+                    return indices.pruneUniqueIndices(
+                        remote,
+                        table,
+                        oldRows,
+                        fieldsToUpdate
+                    );
                 });
         });
 }

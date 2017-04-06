@@ -402,12 +402,21 @@ function updateSingleUniqueIndexKeys(table, index, fieldNames, fieldValues) {
     });
 }
 
-function pruneIndices(remote, table, fkValues, rows) {
-    const swaps = fkValues.map((fkValue, ix) => {
-        return pruneRowIndices(remote, table, fkValue, rows[ix]);
+function pruneIndices(remote, table, fkValues, rows, updatedFields) {
+    const f_touchedIndices = correlateIndices(remote, table, updatedFields);
+    const f_needsPrune = f_touchedIndices.then(touchedIndices => {
+        return touchedIndices.length > 0;
     });
 
-    return Promise.all(swaps);
+    return f_needsPrune.then(needsPrune => {
+        if (!needsPrune) return;
+
+        const prunes = fkValues.map((fkValue, ix) => {
+            return pruneRowIndices(remote, table, fkValue, rows[ix]);
+        });
+
+        return Promise.all(prunes);
+    });
 }
 
 function pruneRowIndices(remote, table, fkValue, row) {
@@ -443,12 +452,21 @@ function pruneRowIndices(remote, table, fkValue, row) {
     });
 }
 
-function pruneUniqueIndices(remote, table, rows) {
-    const swaps = rows.map(row => {
-        return pruneRowUniqueIndices(remote, table, row);
+function pruneUniqueIndices(remote, table, rows, updatedFields) {
+    const f_touchedIndices = correlateUniqueIndices(remote, table, updatedFields);
+    const f_needsPrune = f_touchedIndices.then(touchedIndices => {
+        return touchedIndices.length > 0;
     });
 
-    return Promise.all(swaps);
+    return f_needsPrune.then(needsPrune => {
+        if (!needsPrune) return;
+
+        const prunes = rows.map(row => {
+            return pruneRowUniqueIndices(remote, table, row);
+        });
+
+        return Promise.all(prunes);
+    });
 }
 
 function pruneRowUniqueIndices(remote, table, row) {
