@@ -484,10 +484,21 @@ function internalUpdate(remote, table, mapping, predicate) {
 
             return Promise.all(f_inserts)
                 .then(_ => {
-                    return indices.pruneIndices(remote, table, fkValues, oldRows);
+                    return indices.pruneIndices(
+                        remote,
+                        table,
+                        fkValues,
+                        oldRows,
+                        fieldsToUpdate
+                    );
                 })
                 .then(_ => {
-                    return indices.pruneUniqueIndices(remote, table, oldRows);
+                    return indices.pruneUniqueIndices(
+                        remote,
+                        table,
+                        oldRows,
+                        fieldsToUpdate
+                    );
                 });
         });
 }
