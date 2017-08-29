@@ -4,8 +4,7 @@ const SET_KEY = 'ML_KSET';
 const SUMMARY_KEY = '$$__SUMMARY__$$';
 
 function generateSetKey(tableName) {
-    const encoded = Buffer.from(tableName).toString('base64');
-    return '$$__' + encoded + '__' + SET_KEY + '__$$';
+    return '$$__' + tableName + '__' + SET_KEY + '__$$';
 }
 
 function summaryKey() {
