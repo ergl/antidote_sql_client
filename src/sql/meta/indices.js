@@ -488,6 +488,9 @@ function pruneRowUniqueIndices(remote, table, row) {
         keys.forEach(key => {
             kv.removeKey(remote, table, key);
         });
+
+        const nulls = [...new Array(keys.length)].fill(null)
+        return kv.put(remote, keys, nulls)
     });
 }
 
