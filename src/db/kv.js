@@ -4,7 +4,7 @@ const utils = require('./../utils');
 const keyEncoding = require('./keyEncoding');
 const orderedKeySet = require('./orderedKeySet');
 
-function createRemote(port, url, opts = { bucket: 'default-bucket' }) {
+function createRemote(port, url, opts = { bucket: 'bucket' }) {
     const remote = antidote_client.connect(port, url);
     const bucket = opts.bucket || 'default-bucket';
     return Object.assign(remote, { defaultBucket: bucket });
