@@ -248,6 +248,65 @@ function uniqueIndexTest() {
         });
 }
 
+function joinCheck() {
+    const remote = utils.createRemote();
+
+    const setup = db => antidoteSQL.runTransaction(db, tx => {
+        return antidoteSQL
+            .createTable(tx, 'tableA', ['idA', 'fieldA'])
+            .then(_ => {
+                return antidoteSQL.createTable(tx, 'tableB', [
+                    'idB',
+                    'reference',
+                    'content'
+                ]);
+            })
+            .then(_ => {
+                return antidoteSQL.createFK(tx, 'tableB', {
+                    alias: 'reference',
+                    field_name: 'idA',
+                    reference_table: 'tableA'
+                });
+            });
+    });
+
+    const insert = db => antidoteSQL.runTransaction(db, tx => {
+        return antidoteSQL
+            .insert(tx, 'tableA', { fieldA: 'first' })
+            .then(_ => antidoteSQL.insert(tx, 'tableA', { fieldA: 'second' }))
+            .then(_ => antidoteSQL.insert(tx, 'tableB', { reference: 1, content: 'foo' }))
+            .then(_ => antidoteSQL.insert(tx, 'tableB', { reference: 1, content: 'bar' }))
+            .then(_ => antidoteSQL.insert(tx, 'tableB', { reference: 2, content: 'baz' }))
+            .then(_ => {
+                return antidoteSQL.insert(tx, 'tableB', { reference: 2, content: 'qux' });
+            });
+    });
+
+    const simpleJoin = db => antidoteSQL.runTransaction(db, tx => {
+        return antidoteSQL
+            .select(tx, '*', ['tableB', 'tableA'], {
+                using: ['reference', 'idA']
+            })
+            .then(utils.passThen(console.log));
+    });
+
+    const predicateJoin = db => antidoteSQL.runTransaction(db, tx => {
+        return antidoteSQL
+            .select(tx, '*', ['tableB', 'tableA'], {
+                using: ['reference', 'idA'],
+                tableB: {
+                    content: ['foo', 'baz']
+                }
+            })
+            .then(utils.passThen(console.log));
+    });
+
+    return setup(remote)
+        .then(_ => insert(remote))
+        .then(_ => simpleJoin(remote))
+        .then(_ => predicateJoin(remote));
+}
+
 const toRun = [
     // Sanity check
     connectionTest,
@@ -260,7 +319,7 @@ const toRun = [
     autoCounterTest,
     wwConflictTest,
     foreignKeyTest,
-    uniqueIndexTest,
+    joinCheck
 ];
 
 toRun
