@@ -10,7 +10,7 @@
     "main": "./src/antidoteSQL.js",
     "dependencies": {
         "antidote_ts_client": "0.1.7",
-        "kset": "git://github.com/ergl/kset.git#6da5237bdd2394667ae31d6754136587408aa867"
+        "kset": "https://github.com/ergl/kset.git#6da5237bdd2394667ae31d6754136587408aa867"
     },
     "devDependencies": {
         "rewire": "2.5.2"
