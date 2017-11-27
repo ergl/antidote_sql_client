@@ -26,7 +26,10 @@ function selectScanFn(remote, table, predicateFields) {
 
     return f_containsUniqueIndex.then(({ contained, indexRelation }) => {
         if (contained) {
-            const { index, fieldName } = chooseBestIndex(indexRelation, predicateFields);
+            const { index, fieldName } = chooseBestIndex(
+                indexRelation,
+                predicateFields
+            );
             return function(remote, table, predicate) {
                 return scanUniqueIndex(
                     remote,
@@ -38,7 +41,11 @@ function selectScanFn(remote, table, predicateFields) {
             };
         }
 
-        const f_containsIndex = indices.containsIndex(remote, table, predicateFields);
+        const f_containsIndex = indices.containsIndex(
+            remote,
+            table,
+            predicateFields
+        );
         return f_containsIndex.then(({ contained, indexRelation }) => {
             if (contained) {
                 const { index, fieldName } = chooseBestIndex(
@@ -117,7 +124,9 @@ function scanFast(remote, table, pkValue) {
         .then(validRange => {
             if (!validRange) {
                 throw new Error(
-                    `scanFast of keys ${pkValues} on ${table} went out of valid range`
+                    `scanFast of keys ${pkValues} on ${
+                        table
+                    } went out of valid range`
                 );
             }
 
@@ -143,7 +152,9 @@ function scanSequential(remote, table) {
     const f_schema = schema.getSchema(remote, table);
 
     const rootKey = keyEncoding.table(table);
-    const keys = kv.subkeyBatch(remote, table, rootKey).filter(keyEncoding.isData);
+    const keys = kv
+        .subkeyBatch(remote, table, rootKey)
+        .filter(keyEncoding.isData);
     return kv.get(remote, keys).then(values => {
         return f_schema.then(schema => {
             return toRowExt(values, schema);
@@ -212,7 +223,9 @@ function scanUniqueIndex(remote, table, index, field, value) {
             return Promise.resolve([]);
         }
 
-        const f_allBatches = pkValues.map(pkValue => fetchBatch(remote, table, pkValue));
+        const f_allBatches = pkValues.map(pkValue =>
+            fetchBatch(remote, table, pkValue)
+        );
         return Promise.all(f_allBatches).then(utils.flatten);
     });
 }
@@ -220,7 +233,9 @@ function scanUniqueIndex(remote, table, index, field, value) {
 function fetchBatch(remote, table, pkValue) {
     const pkValues = utils.arreturn(pkValue);
     const pks = pkValues.map(k => keyEncoding.spk(table, k));
-    const keyBatch = utils.flatten(pks.map(pk => kv.subkeyBatch(remote, table, pk)));
+    const keyBatch = utils.flatten(
+        pks.map(pk => kv.subkeyBatch(remote, table, pk))
+    );
 
     const f_schema = schema.getSchema(remote, table);
     const f_result = kv.get(remote, keyBatch);
@@ -244,12 +259,9 @@ function toRowExt(map, field_names) {
 
     let vi = 0;
     while (vi < row.length) {
-        const obj = field_names.reduce(
-            (acc, f, ix) => {
-                return Object.assign(acc, { [f]: row[ix + vi] });
-            },
-            {}
-        );
+        const obj = field_names.reduce((acc, f, ix) => {
+            return Object.assign(acc, { [f]: row[ix + vi] });
+        }, {});
         res.push(obj);
         vi = vi + field_names.length;
     }
