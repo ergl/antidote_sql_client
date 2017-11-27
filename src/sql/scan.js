@@ -201,7 +201,7 @@ function scanUniqueIndex(remote, table, index, field, value) {
     const f_pkValues = matchKeys.map(matchKey => {
         // Don't throw on empty gets, this means that the given value
         // is not in the index.
-        return kv.get(remote, matchKey, { unsafe: true });
+        return kv.get(remote, matchKey, { validateEmpty: false });
     });
 
     return Promise.all(f_pkValues).then(maybeNestedpkValues => {

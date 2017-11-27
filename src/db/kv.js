@@ -215,7 +215,7 @@ function put(txHandle, key, value) {
 // condPut(_, k, v, e) will succeed iff get(_, k) = e | get(_, k) = ⊥
 function condPut(remote, key, value, expected) {
     return runT(remote, function(tx) {
-        return get(tx, key, { unsafe: true }).then(vs => {
+        return get(tx, key, { validateEmpty: false }).then(vs => {
             const exp = utils.arreturn(expected);
             if (exp.length !== vs.length) {
                 throw new Error(
@@ -245,7 +245,7 @@ function cond_match(got, expected) {
     return empty || match;
 }
 
-function get(txHandle, key, { unsafe } = { unsafe: false }) {
+function get(txHandle, key, options = { validateEmpty: true }) {
     if (!isTxHandle(txHandle)) {
         throw new Error('Calling get outside a transaction');
     }
@@ -260,7 +260,7 @@ function get(txHandle, key, { unsafe } = { unsafe: false }) {
 
     const refs = readable_keys.map(k => generateRef(connection, k));
     return connection.readBatch(refs).then(read_values => {
-        if (unsafe) return read_values;
+        if (!options.validateEmpty) return read_values;
 
         const { valid, values } = invalidValues(readable_keys, read_values);
         if (!valid) {
