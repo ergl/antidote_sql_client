@@ -3,6 +3,8 @@ const keyEncoding = require('./../db/keyEncoding');
 
 function createMeta(remote, table_name, pk_field, schema) {
     const meta_key = keyEncoding.table(table_name);
+    // TODO: Split into several keys
+    // instead of putting everthing under the meta_key (table key)
     const meta_content = {
         infks: [],
         outfks: [],
@@ -14,13 +16,16 @@ function createMeta(remote, table_name, pk_field, schema) {
     };
 
     return kv.runT(remote, function(tx) {
-        return updateSummary(tx, table_name)
+        return createSummaryEntry(tx, table_name)
             .then(_ => kv.populateSet(tx))
             .then(tx => kv.put(tx, meta_key, meta_content));
     });
 }
 
-function updateSummary(remote, tableName) {
+// Create a summary entry for the given table name
+//
+// If the summary doesn't exist, create it
+function createSummaryEntry(remote, tableName) {
     const setKey = keyEncoding.generateSetKey(tableName);
     const summaryEntry = { tableName, setKey };
 
