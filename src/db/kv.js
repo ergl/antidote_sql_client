@@ -16,17 +16,17 @@ function closeRemote(remote) {
 
 // Create a transaction handle
 function createHandle(antidoteConnection, sets) {
-    return { __handle_v1: true, remote: antidoteConnection, kset: sets };
+    return { __is_handle: true, remote: antidoteConnection, kset: sets };
 }
 
 function getHandleConnection(handle) {
-    if (handle.__handle_v1) {
+    if (handle.__is_handle) {
         return handle.remote;
     }
 }
 
 function getHandleKset(handle) {
-    if (handle.__handle_v1) {
+    if (handle.__is_handle) {
         return handle.kset;
     }
 }
@@ -40,7 +40,7 @@ function setHandleKset(handle, ksets) {
 function isTxHandle(remote) {
     if (remote === undefined) throw new Error('Undefined remote');
 
-    if (remote.__handle_v1) {
+    if (remote.__is_handle) {
         return true;
     }
 
