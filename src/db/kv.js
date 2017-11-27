@@ -14,47 +14,78 @@ function closeRemote(remote) {
     remote.close();
 }
 
+// Create a transaction handle
+function createHandle(antidoteConnection, sets) {
+    return { __handle_v1: true, remote: antidoteConnection, kset: sets };
+}
+
+function getHandleConnection(handle) {
+    if (handle.__handle_v1) {
+        return handle.remote;
+    }
+}
+
+function getHandleKset(handle) {
+    if (handle.__handle_v1) {
+        return handle.kset;
+    }
+}
+
+function setHandleKset(handle, ksets) {
+    return Object.assign(handle, { kset: ksets });
+}
+
 // The interface for connections and transaction handles is pretty much
 // identical, but the current API doesn't allow nested transaction.
 function isTxHandle(remote) {
     if (remote === undefined) throw new Error('Undefined remote');
+
+    if (remote.__handle_v1) {
+        return true;
+    }
+
+    // If it's a raw Antidote connection, check for internal state (hack)
     return !remote.hasOwnProperty('minSnapshotTime');
 }
 
-function startT(remote) {
-    return remote.startTransaction();
+function startT(antidoteConnection) {
+    return antidoteConnection.startTransaction();
 }
 
-function commitT(remote) {
-    return remote.commit();
+function commitT(antidoteConnection) {
+    return antidoteConnection.commit();
 }
 
-function abortT(remote) {
-    return remote.abort();
+function abortT(antidoteConnection) {
+    return antidoteConnection.abort();
 }
 
 // Refresh the setList of the transaction handle
 //
 // A transaction handle is {remote: Connection, kset},
 // where kset is a list of {tableName: string, set: Kset}
+//
+// This will sync the local handle state with the one in the database
 function populateSet(txHandle) {
-    return readSet(txHandle.remote).then(setList => {
-        const oldSets = txHandle.kset;
+    const conn = getHandleConnection(txHandle);
+    return readSet(conn).then(setList => {
+        const oldSets = getHandleKset(txHandle);
         oldSets.forEach(set => {
             if (!setList.find(elt => elt === set)) {
                 setList.push(set);
             }
         });
-        return Object.assign(txHandle, { kset: setList });
+
+        return setHandleKset(txHandle, setList);
     });
 }
 
 // Fetch the list of {tableName: string, set: Kset} sets for the given connection
-function readSet(remote) {
-    const f_allSets = readSummary({ remote });
+function readSet(antidoteConnection) {
+    const f_allSets = raw_readSummary(antidoteConnection);
     return f_allSets.then(allSets => {
         const all = allSets.map(({ tableName, setKey }) => {
-            const f_set = readSingleSet(remote, setKey);
+            const f_set = readSingleSet(antidoteConnection, setKey);
             return f_set.then(set => ({ tableName, set }));
         });
 
@@ -63,8 +94,8 @@ function readSet(remote) {
 }
 
 // Fetch the kset object for the given setKey
-function readSingleSet(remote, setKey) {
-    const ref = generateRef(remote, setKey);
+function readSingleSet(antidoteConnection, setKey) {
+    const ref = generateRef(antidoteConnection, setKey);
     return ref.read().then(v => {
         if (v === null) {
             return orderedKeySet.empty();
@@ -76,7 +107,10 @@ function readSingleSet(remote, setKey) {
 
 // Flush back to the database the kset objects modified during
 // this transaction
-function writeSet({ remote, kset }) {
+function writeSet(txHandle) {
+    const remote = getHandleConnection(txHandle);
+    const kset = getHandleKset(txHandle);
+
     const all = kset.map(({ tableName, set }) => {
         return writeSingleSet(remote, { tableName, set });
     });
@@ -87,34 +121,41 @@ function writeSet({ remote, kset }) {
 // Update the kset object in the database for the given table
 //
 // If the kset was not modified (read-only tx), then skip
-function writeSingleSet(remote, { tableName, set }) {
+function writeSingleSet(antidoteConnection, { tableName, set }) {
     if (!orderedKeySet.wasChanged(set)) {
         return Promise.resolve([]);
     }
 
     const setKey = keyEncoding.generateSetKey(tableName);
-    const ref = generateRef(remote, setKey);
+    const ref = generateRef(antidoteConnection, setKey);
     const ser = orderedKeySet.serialize(set);
-    return remote.update(ref.set(ser));
+    return antidoteConnection.update(ref.set(ser));
+}
+
+function readSummary(txHandle) {
+    const connection = getHandleConnection(txHandle);
+    return raw_readSummary(connection);
 }
 
 // Get the summary for the database
 //
 // The summary is a list of objects {tableName: string, setKey: Key},
 // where the set key points to the table-specific Key Set stored in Antidote
-function readSummary({ remote }) {
+function raw_readSummary(antidoteConnection) {
     const summaryKey = keyEncoding.summaryKey();
-    const ref = generateRef(remote, summaryKey);
+    const ref = generateRef(antidoteConnection, summaryKey);
     return ref.read().then(v => {
         return v === null ? [] : v;
     });
 }
 
 // Overwrite the summary for the database
-function writeSummary({ remote }, summary) {
+function writeSummary(txHandle, summary) {
+    const conn = getHandleConnection(txHandle);
+
     const summaryKey = keyEncoding.summaryKey();
-    const ref = generateRef(remote, summaryKey);
-    return remote.update(ref.set(summary));
+    const ref = generateRef(conn, summaryKey);
+    return conn.update(ref.set(summary));
 }
 
 function runT(remote, fn) {
@@ -124,22 +165,22 @@ function runT(remote, fn) {
         return fn(remote);
     }
 
-    const runnable = tx_handle => {
+    const runnable = dbConnection => {
         // TODO: Fetch the kset objects on demand?
-        return readSet(tx_handle)
-            .then(set => ({ remote: tx_handle, kset: set }))
-            .then(tx => {
-                const f_result = fn(tx).then(result => {
-                    return writeSet(tx).then(_ => result);
+        return readSet(dbConnection)
+            .then(set => createHandle(dbConnection, set))
+            .then(txHandle => {
+                const f_result = fn(txHandle).then(result => {
+                    return writeSet(txHandle).then(_ => result);
                 });
 
                 return f_result.then(result => {
-                    const f_ct = commitT(tx.remote);
+                    const f_ct = commitT(getHandleConnection(txHandle));
                     return f_ct.then(ct => ({ ct, result }));
                 });
             })
             .catch(e => {
-                return abortT(tx_handle).then(_ => {
+                return abortT(dbConnection).then(_ => {
                     console.error('Transaction aborted, reason:', e);
                     throw e;
                 });
@@ -149,19 +190,23 @@ function runT(remote, fn) {
     return startT(remote).then(runnable);
 }
 
-function put({ remote, kset }, key, value) {
-    if (!isTxHandle(remote)) {
+function put(txHandle, key, value) {
+    if (!isTxHandle(txHandle)) {
         throw new Error('Calling put outside a transaction');
     }
+
+    const connection = getHandleConnection(txHandle);
 
     const keys = utils.arreturn(key);
     const readable_keys = keys.map(keyEncoding.toString);
     const values = utils.arreturn(value);
 
-    const refs = readable_keys.map(k => generateRef(remote, k));
+    const refs = readable_keys.map(k => generateRef(connection, k));
     const ops = refs.map((r, i) => r.set(values[i]));
+
+    const kset = getHandleKset(txHandle);
     // If put is successful, add the keys to the kset
-    return remote.update(ops).then(ct => {
+    return connection.update(ops).then(ct => {
         keys.forEach(key => addKey(kset, key));
         return ct;
     });
@@ -200,11 +245,12 @@ function cond_match(got, expected) {
     return empty || match;
 }
 
-function get({ remote }, key, { unsafe } = { unsafe: false }) {
-    if (!isTxHandle(remote)) {
+function get(txHandle, key, { unsafe } = { unsafe: false }) {
+    if (!isTxHandle(txHandle)) {
         throw new Error('Calling get outside a transaction');
     }
 
+    const connection = getHandleConnection(txHandle);
     const keys = utils.arreturn(key);
     if (keys.length === 0) {
         return Promise.resolve([]);
@@ -212,8 +258,8 @@ function get({ remote }, key, { unsafe } = { unsafe: false }) {
 
     const readable_keys = keys.map(keyEncoding.toString);
 
-    const refs = readable_keys.map(k => generateRef(remote, k));
-    return remote.readBatch(refs).then(read_values => {
+    const refs = readable_keys.map(k => generateRef(connection, k));
+    return connection.readBatch(refs).then(read_values => {
         if (unsafe) return read_values;
 
         const { valid, values } = invalidValues(readable_keys, read_values);
@@ -238,8 +284,8 @@ function invalidValues(keys, values) {
     return { valid: all_valid, values: invalid };
 }
 
-function generateRef(remote, key) {
-    return remote.register(key);
+function generateRef(antidoteConnection, key) {
+    return antidoteConnection.register(key);
 }
 
 function addKey(kset, key) {
@@ -248,23 +294,26 @@ function addKey(kset, key) {
     return orderedKeySet.add(key, set);
 }
 
-function subkeyBatch({ kset }, table, key) {
+function subkeyBatch(txHandle, table, key) {
+    const kset = getHandleKset(txHandle);
     const { set } = kset.find(({ tableName }) => tableName === table);
     return orderedKeySet.subkeys(key, set);
 }
 
-function strictSubkeyBatch({ kset }, table, key) {
+function strictSubkeyBatch(txHandle, table, key) {
+    const kset = getHandleKset(txHandle);
     const { set } = kset.find(({ tableName }) => tableName === table);
     return orderedKeySet.strictSubkeys(key, set);
 }
 
-function removeKey({ kset }, table, key) {
+function removeKey(txHandle, table, key) {
+    const kset = getHandleKset(txHandle);
     const { set } = kset.find(({ tableName }) => tableName === table);
     return orderedKeySet.remove(key, set);
 }
 
-function reset(remote) {
-    const { kset } = remote;
+function reset(txHandle) {
+    const kset = getHandleKset(txHandle);
 
     const allSets = kset.map(({ set }) => set);
     const allKeys = allSets.map(set => ({
@@ -276,7 +325,7 @@ function reset(remote) {
     });
 
     const f_removeAll = allKeys.map(({ keys }, ix) => {
-        return put(remote, keys, allValues[ix]);
+        return put(txHandle, keys, allValues[ix]);
     });
 
     return Promise.all(f_removeAll).then(_ => {
@@ -284,7 +333,7 @@ function reset(remote) {
             keys.forEach(key => orderedKeySet.remove(key, set));
         });
 
-        return writeSummary(remote, null);
+        return writeSummary(txHandle, null);
     });
 }
 
