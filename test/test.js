@@ -21,15 +21,14 @@ function readWriteTest() {
         .runTransaction(remote, tx => {
             return antidoteSQL
                 .createTable(tx, 'tableA', ['idA', 'fieldA'])
-                .then(_ => antidoteSQL.insert(tx, 'tableA', {
-                    fieldA: 'foo'
-                }))
+                .then(_ => {
+                    return antidoteSQL.insert(tx, 'tableA', {
+                        fieldA: 'content'
+                    });
+                })
                 .then(_ => antidoteSQL.select(tx, '*', 'tableA'))
                 .then(res => {
-                    // expect res === [{ idA: 1, fieldA: 'content' }]
-                    assert.ok(res.length === 1);
-                    assert(res[0]['idA'] === 1);
-                    assert(res[0]['fieldA'] === 'foo');
+                    assert.deepEqual(res, [{ idA: 1, fieldA: 'content' }]);
                 });
         })
         .then(_ => antidoteSQL.close(remote));
@@ -39,20 +38,25 @@ function readWriteTest() {
 function sequentialReadTest() {
     const remote = utils.createRemote();
 
-    const first = db => antidoteSQL.runTransaction(db, tx => {
-        return antidoteSQL.createTable(tx, 'tableA', ['idA', 'fieldA']).then(_ => {
-            return antidoteSQL.insert(tx, 'tableA', { fieldA: 'content' });
+    const first = db => {
+        return antidoteSQL.runTransaction(db, tx => {
+            return antidoteSQL
+                .createTable(tx, 'tableA', ['idA', 'fieldA'])
+                .then(_ => {
+                    return antidoteSQL.insert(tx, 'tableA', {
+                        fieldA: 'content'
+                    });
+                });
         });
-    });
+    };
 
-    const second = db => antidoteSQL.runTransaction(db, tx => {
-        return antidoteSQL.select(tx, '*', 'tableA').then(res => {
-            // expect res === [{ idA: 1, fieldA: 'content' }]
-            assert.ok(res.length === 1);
-            assert(res[0]['idA'] === 1);
-            assert(res[0]['fieldA'] === 'content');
+    const second = db => {
+        return antidoteSQL.runTransaction(db, tx => {
+            return antidoteSQL.select(tx, '*', 'tableA').then(res => {
+                assert.deepEqual(res, [{ idA: 1, fieldA: 'content' }]);
+            });
         });
-    });
+    };
 
     return first(remote).then(_ => second(remote));
 }
@@ -67,17 +71,19 @@ function updateTest() {
             .then(_ => antidoteSQL.insert(tx, 'tableA', { fieldA: 'content' }))
             .then(_ => {
                 return antidoteSQL.select(tx, '*', 'tableA').then(res => {
-                    assert.ok(res.length === 1);
-                    assert(res[0]['idA'] === 1);
-                    assert(res[0]['fieldA'] === 'content');
+                    assert.deepEqual(res, [{ idA: 1, fieldA: 'content' }]);
                 });
             })
-            .then(_ => antidoteSQL.update(tx, 'tableA', { fieldA: 'updated content' }))
+            .then(_ => {
+                return antidoteSQL.update(tx, 'tableA', {
+                    fieldA: 'updated content'
+                });
+            })
             .then(_ => {
                 return antidoteSQL.select(tx, '*', 'tableA').then(res => {
-                    assert.ok(res.length === 1);
-                    assert(res[0]['idA'] === 1);
-                    assert(res[0]['fieldA'] === 'updated content');
+                    assert.deepEqual(res, [
+                        { idA: 1, fieldA: 'updated content' }
+                    ]);
                 });
             })
             .then(_ => {
@@ -87,9 +93,9 @@ function updateTest() {
             })
             .then(_ => {
                 return antidoteSQL.select(tx, '*', 'tableA').then(res => {
-                    assert.ok(res.length === 1);
-                    assert(res[0]['idA'] === 1);
-                    assert(res[0]['fieldA'] === 'updated content with a function');
+                    assert.deepEqual(res, [
+                        { idA: 1, fieldA: 'updated content with a function' }
+                    ]);
                 });
             });
     });
@@ -99,58 +105,72 @@ function updateTest() {
 function ksetRefreshTest() {
     const remote = utils.createRemote();
 
-    const setup = db => antidoteSQL.runTransaction(db, tx => {
-        console.log('Setup');
-        utils.printKSets(tx);
-        return antidoteSQL.createTable(tx, 'tableA', ['idA', 'fieldA']);
-    });
-
-    const insert = db => antidoteSQL.runTransaction(db, tx => {
-        console.log('Insert');
-        utils.printKSets(tx);
-        return antidoteSQL.insert(tx, 'tableA', {
-            fieldA: 'content'
+    const setup = db => {
+        return antidoteSQL.runTransaction(db, tx => {
+            console.log('Setup');
+            utils.printKSets(tx);
+            return antidoteSQL.createTable(tx, 'tableA', ['idA', 'fieldA']);
         });
-    });
+    };
 
-    const read = db => antidoteSQL.runTransaction(db, tx => {
-        console.log('Read');
-        utils.printKSets(tx);
-        return antidoteSQL.select(tx, '*', 'tableA').then(res => {
-            // expect res === [{ idA: 1, fieldA: 'content' }]
-            assert.ok(res.length === 1);
-            assert(res[0]['idA'] === 1);
-            assert(res[0]['fieldA'] === 'content');
+    const insert = db => {
+        return antidoteSQL.runTransaction(db, tx => {
+            console.log('Insert');
+            utils.printKSets(tx);
+            return antidoteSQL.insert(tx, 'tableA', {
+                fieldA: 'content'
+            });
         });
-    });
+    };
 
-    return setup(remote).then(_ => insert(remote)).then(_ => read(remote));
+    const read = db => {
+        return antidoteSQL.runTransaction(db, tx => {
+            console.log('Read');
+            utils.printKSets(tx);
+            return antidoteSQL.select(tx, '*', 'tableA').then(res => {
+                assert.deepEqual(res, [{ idA: 1, fieldA: 'content' }]);
+            });
+        });
+    };
+
+    return setup(remote)
+        .then(_ => insert(remote))
+        .then(_ => read(remote));
 }
 
 // Make sure that autoincremented PK don't change on aborted transactions
 function autoCounterTest() {
     const remote = utils.createRemote();
 
-    const setup = db => antidoteSQL.runTransaction(db, tx => {
-        return antidoteSQL.createTable(tx, 'tableA', ['idA', 'fieldA']);
-    });
-
-    const abortedInsert = db => antidoteSQL.runTransaction(db, tx => {
-        return antidoteSQL.insert(tx, 'tableA', { fieldA: 'wrong' }).then(_ => {
-            throw new Error('Purposeful abort');
+    const setup = db => {
+        return antidoteSQL.runTransaction(db, tx => {
+            return antidoteSQL.createTable(tx, 'tableA', ['idA', 'fieldA']);
         });
-    });
+    };
 
-    const successfulInsert = db => antidoteSQL.runTransaction(db, tx => {
-        return antidoteSQL.insert(tx, 'tableA', { fieldA: 'right' });
-    });
-
-    const read = db => antidoteSQL.runTransaction(db, tx => {
-        return antidoteSQL.select(tx, 'idA', 'tableA').then(res => {
-            const [{ idA }] = res;
-            assert.ok(idA === 1);
+    const abortedInsert = db => {
+        return antidoteSQL.runTransaction(db, tx => {
+            return antidoteSQL
+                .insert(tx, 'tableA', { fieldA: 'wrong' })
+                .then(_ => {
+                    throw new Error('Purposeful abort');
+                });
         });
-    });
+    };
+
+    const successfulInsert = db => {
+        return antidoteSQL.runTransaction(db, tx => {
+            return antidoteSQL.insert(tx, 'tableA', { fieldA: 'right' });
+        });
+    };
+
+    const read = db => {
+        return antidoteSQL.runTransaction(db, tx => {
+            return antidoteSQL.select(tx, 'idA', 'tableA').then(res => {
+                assert.deepEqual(res, [{ idA: 1 }]);
+            });
+        });
+    };
 
     return setup(remote)
         .then(_ => abortedInsert(remote).catch(_ => successfulInsert(remote)))
@@ -161,13 +181,25 @@ function autoCounterTest() {
 function wwConflictTest() {
     const remote = utils.createRemote();
 
-    const createA = () => antidoteSQL.runTransaction(remote, tx => {
-        return antidoteSQL.createTable(tx, 'tableA', ['aId', 'fieldAA', 'fieldAB']);
-    });
+    const createA = () => {
+        return antidoteSQL.runTransaction(remote, tx => {
+            return antidoteSQL.createTable(tx, 'tableA', [
+                'aId',
+                'fieldAA',
+                'fieldAB'
+            ]);
+        });
+    };
 
-    const createB = () => antidoteSQL.runTransaction(remote, tx => {
-        return antidoteSQL.createTable(tx, 'tableB', ['bId', 'fieldBA', 'fieldBB']);
-    });
+    const createB = () => {
+        return antidoteSQL.runTransaction(remote, tx => {
+            return antidoteSQL.createTable(tx, 'tableB', [
+                'bId',
+                'fieldBA',
+                'fieldBB'
+            ]);
+        });
+    };
 
     return Promise.all([createA(), createB()])
         .catch(_ => {
@@ -186,11 +218,13 @@ function foreignKeyTest() {
         return antidoteSQL
             .createTable(tx, 'tableA', ['idA', 'fieldA'])
             .then(_ => antidoteSQL.createTable(tx, 'tableB', ['idB', 'fieldB']))
-            .then(_ => antidoteSQL.createFK(tx, 'tableA', {
-                alias: 'fieldA',
-                field_name: 'idB',
-                reference_table: 'tableB'
-            }))
+            .then(_ => {
+                return antidoteSQL.createFK(tx, 'tableA', {
+                    alias: 'fieldA',
+                    field_name: 'idB',
+                    reference_table: 'tableB'
+                });
+            })
             .then(_ => {
                 return antidoteSQL
                     .insert(tx, 'tableA', {
@@ -202,9 +236,11 @@ function foreignKeyTest() {
                             fieldB: 'foo'
                         });
                     })
-                    .then(_ => antidoteSQL.insert(tx, 'tableA', {
-                        fieldA: 1
-                    }));
+                    .then(_ => {
+                        return antidoteSQL.insert(tx, 'tableA', {
+                            fieldA: 1
+                        });
+                    });
             });
     });
 }
@@ -212,26 +248,39 @@ function foreignKeyTest() {
 function uniqueIndexTest() {
     const remote = utils.createRemote();
 
-    const setup = db => antidoteSQL.runTransaction(db, tx => {
-        return antidoteSQL.createTable(tx, 'tableA', ['idA', 'fieldA']).then(_ => {
-            return antidoteSQL.createUniqueIndex(tx, 'tableA', {
-                index_name: 'tableA_uniqueIndex',
-                field_names: 'fieldA'
+    const setup = db => {
+        return antidoteSQL.runTransaction(db, tx => {
+            return antidoteSQL
+                .createTable(tx, 'tableA', ['idA', 'fieldA'])
+                .then(_ => {
+                    return antidoteSQL.createUniqueIndex(tx, 'tableA', {
+                        index_name: 'tableA_uniqueIndex',
+                        field_names: 'fieldA'
+                    });
+                });
+        });
+    };
+
+    const insert = db => {
+        return antidoteSQL.runTransaction(db, tx => {
+            return antidoteSQL.insert(tx, 'tableA', {
+                fieldA: 'unique content'
             });
         });
-    });
+    };
 
-    const insert = db => antidoteSQL.runTransaction(db, tx => {
-        return antidoteSQL.insert(tx, 'tableA', {
-            fieldA: 'unique content'
+    const modifyUniqueIndex = db => {
+        return antidoteSQL.runTransaction(db, tx => {
+            return antidoteSQL.update(
+                tx,
+                'tableA',
+                { fieldA: 'something different' },
+                {
+                    fieldA: 'unique content'
+                }
+            );
         });
-    });
-
-    const modifyUniqueIndex = db => antidoteSQL.runTransaction(db, tx => {
-        return antidoteSQL.update(tx, 'tableA', { fieldA: 'something different' }, {
-            fieldA: 'unique content'
-        });
-    });
+    };
 
     return setup(remote)
         .then(_ => insert(remote))
@@ -251,60 +300,120 @@ function uniqueIndexTest() {
 function joinCheck() {
     const remote = utils.createRemote();
 
-    const setup = db => antidoteSQL.runTransaction(db, tx => {
-        return antidoteSQL
-            .createTable(tx, 'tableA', ['idA', 'fieldA'])
-            .then(_ => {
-                return antidoteSQL.createTable(tx, 'tableB', [
-                    'idB',
-                    'reference',
-                    'content'
-                ]);
-            })
-            .then(_ => {
-                return antidoteSQL.createFK(tx, 'tableB', {
-                    alias: 'reference',
-                    field_name: 'idA',
-                    reference_table: 'tableA'
+    const setup = db => {
+        return antidoteSQL.runTransaction(db, tx => {
+            return antidoteSQL
+                .createTable(tx, 'tableA', ['idA', 'fieldA'])
+                .then(_ => {
+                    return antidoteSQL.createTable(tx, 'tableB', [
+                        'idB',
+                        'reference',
+                        'content'
+                    ]);
+                })
+                .then(_ => {
+                    return antidoteSQL.createFK(tx, 'tableB', {
+                        alias: 'reference',
+                        field_name: 'idA',
+                        reference_table: 'tableA'
+                    });
                 });
-            });
-    });
+        });
+    };
 
-    const insert = db => antidoteSQL.runTransaction(db, tx => {
-        return antidoteSQL
-            .insert(tx, 'tableA', { fieldA: 'first' })
-            .then(_ => antidoteSQL.insert(tx, 'tableA', { fieldA: 'second' }))
-            .then(_ => antidoteSQL.insert(tx, 'tableB', { reference: 1, content: 'foo' }))
-            .then(_ => antidoteSQL.insert(tx, 'tableB', { reference: 1, content: 'bar' }))
-            .then(_ => antidoteSQL.insert(tx, 'tableB', { reference: 2, content: 'baz' }))
-            .then(_ => {
-                return antidoteSQL.insert(tx, 'tableB', { reference: 2, content: 'qux' });
-            });
-    });
+    const insert = db => {
+        return antidoteSQL.runTransaction(db, tx => {
+            return antidoteSQL
+                .insert(tx, 'tableA', { fieldA: 'first' })
+                .then(_ => {
+                    return antidoteSQL.insert(tx, 'tableA', {
+                        fieldA: 'second'
+                    });
+                })
+                .then(_ => {
+                    return antidoteSQL.insert(tx, 'tableB', {
+                        reference: 1,
+                        content: 'foo'
+                    });
+                })
+                .then(_ => {
+                    return antidoteSQL.insert(tx, 'tableB', {
+                        reference: 1,
+                        content: 'bar'
+                    });
+                })
+                .then(_ => {
+                    return antidoteSQL.insert(tx, 'tableB', {
+                        reference: 2,
+                        content: 'baz'
+                    });
+                })
+                .then(_ => {
+                    return antidoteSQL.insert(tx, 'tableB', {
+                        reference: 2,
+                        content: 'qux'
+                    });
+                });
+        });
+    };
 
-    const simpleJoin = db => antidoteSQL.runTransaction(db, tx => {
-        return antidoteSQL
-            .select(tx, '*', ['tableB', 'tableA'], {
-                using: ['reference', 'idA']
-            })
-            .then(utils.passThen(console.log));
-    });
+    const simpleJoin = db => {
+        return antidoteSQL.runTransaction(db, tx => {
+            return antidoteSQL
+                .select(tx, '*', ['tableB', 'tableA'], {
+                    using: ['reference', 'idA']
+                })
+                .then(utils.passThen(console.log));
+        });
+    };
 
-    const predicateJoin = db => antidoteSQL.runTransaction(db, tx => {
-        return antidoteSQL
-            .select(tx, '*', ['tableB', 'tableA'], {
-                using: ['reference', 'idA'],
-                tableB: {
-                    content: ['foo', 'baz']
-                }
-            })
-            .then(utils.passThen(console.log));
-    });
+    const predicateJoin = db => {
+        return antidoteSQL.runTransaction(db, tx => {
+            return antidoteSQL
+                .select(tx, '*', ['tableB', 'tableA'], {
+                    using: ['reference', 'idA'],
+                    tableB: {
+                        content: ['foo', 'baz']
+                    }
+                })
+                .then(utils.passThen(console.log));
+        });
+    };
 
     return setup(remote)
         .then(_ => insert(remote))
         .then(_ => simpleJoin(remote))
         .then(_ => predicateJoin(remote));
+}
+
+function cacheTest() {
+    const kv = require('../src/db/kv');
+    const keyEncoding = require('../src/db/keyEncoding');
+
+    const remote = antidoteSQL.connect(8087, '127.0.0.1');
+    return antidoteSQL.runTransaction(remote, tx => {
+        return antidoteSQL
+            .createTable(tx, 'some_table', ['idTable', 'someOtherField'])
+            .then(_ => {
+                const key = keyEncoding.table('some_table');
+                return kv
+                    .get(tx, key, { fromCache: true })
+                    .then(result => {
+                        assert.notDeepEqual(result, null);
+                    })
+                    .then(_ => {
+                        return kv.put(tx, key, 'some_value', {
+                            cacheResult: true
+                        });
+                    })
+                    .then(_ => {
+                        return kv.get(tx, key, { fromCache: true });
+                    })
+                    .then(result => {
+                        assert.deepEqual(result, 'some_value');
+                    });
+            });
+    });
 }
 
 const toRun = [
@@ -319,17 +428,16 @@ const toRun = [
     autoCounterTest,
     wwConflictTest,
     foreignKeyTest,
-    joinCheck
+    joinCheck,
+    // Other tests
+    cacheTest
 ];
 
 toRun
-    .reduce(
-        (acc, fn) => {
-            return acc.then(_ => {
-                console.log('Executing', fn.name);
-                return fn().then(_ => utils.reset());
-            });
-        },
-        utils.reset()
-    )
+    .reduce((acc, fn) => {
+        return acc.then(_ => {
+            console.log('Executing', fn.name);
+            return fn().then(_ => utils.reset());
+        });
+    }, utils.reset())
     .then(_ => process.exit());

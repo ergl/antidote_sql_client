@@ -15,8 +15,27 @@ function closeRemote(remote) {
 }
 
 // Create a transaction handle
-function createHandle(antidoteConnection, sets) {
-    return { __is_handle: true, remote: antidoteConnection, kset: sets };
+function createHandle(antidoteConnection, sets, cache = {}) {
+    return { __is_handle: true, remote: antidoteConnection, kset: sets, cache };
+}
+
+function txCachePut(handle, key, value) {
+    if (!handle.__is_handle) {
+        throw new Error('Caches only supported inside transactions');
+    }
+
+    const cache = handle.cache;
+    handle.cache = Object.assign(cache, { [key]: value });
+}
+
+function txCacheGet(handle, key) {
+    if (!handle.__is_handle) {
+        throw new Error('Caches only supported inside transactions');
+    }
+
+    const cache = handle.cache;
+    const val = cache[key];
+    return val === undefined ? null : val;
 }
 
 function getHandleConnection(handle) {
@@ -190,7 +209,7 @@ function runT(remote, fn) {
     return startT(remote).then(runnable);
 }
 
-function put(txHandle, key, value) {
+function put(txHandle, key, value, options = { cacheResult: false }) {
     if (!isTxHandle(txHandle)) {
         throw new Error('Calling put outside a transaction');
     }
@@ -205,9 +224,15 @@ function put(txHandle, key, value) {
     const ops = refs.map((r, i) => r.set(values[i]));
 
     const kset = getHandleKset(txHandle);
-    // If put is successful, add the keys to the kset
     return connection.update(ops).then(ct => {
-        keys.forEach(key => addKey(kset, key));
+        // If put is successful, add the keys to the kset
+        // and update the cache (if needed)
+        keys.forEach((key, idx) => {
+            addKey(kset, key);
+            if (options.cacheResult === true) {
+                txCachePut(txHandle, keyEncoding.toString(key), values[idx]);
+            }
+        });
         return ct;
     });
 }
@@ -245,7 +270,11 @@ function cond_match(got, expected) {
     return empty || match;
 }
 
-function get(txHandle, key, options = { validateEmpty: true }) {
+function get(
+    txHandle,
+    key,
+    options = { validateEmpty: true, fromCache: false }
+) {
     if (!isTxHandle(txHandle)) {
         throw new Error('Calling get outside a transaction');
     }
@@ -258,13 +287,34 @@ function get(txHandle, key, options = { validateEmpty: true }) {
 
     const readable_keys = keys.map(keyEncoding.toString);
 
+    if (options.fromCache === true) {
+        const cached_values = readable_keys.map(strkey => {
+            return txCacheGet(txHandle, strkey);
+        });
+
+        // Only return if cache is not empty
+        if (cached_values.every(item => item !== null)) {
+            if (cached_values.length === 1) {
+                return Promise.resolve(cached_values[0]);
+            }
+
+            return Promise.resolve(cached_values);
+        }
+    }
+
     const refs = readable_keys.map(k => generateRef(connection, k));
     return connection.readBatch(refs).then(read_values => {
-        if (!options.validateEmpty) return read_values;
+        if (options.validateEmpty === false) return read_values;
 
         const { valid, values } = invalidValues(readable_keys, read_values);
         if (!valid) {
             throw new Error(`Empty get on key: ${values}`);
+        }
+
+        if (options.fromCache === true) {
+            readable_keys.forEach((strkey, idx) => {
+                txCachePut(txHandle, strkey, read_values[idx]);
+            });
         }
 
         if (read_values.length === 1) {
