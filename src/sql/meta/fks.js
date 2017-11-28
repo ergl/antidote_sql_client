@@ -75,7 +75,11 @@ function internalAddFK(remote, tableName, fkMap) {
                         [k]: k === 'reference_table' ? tableName : v
                     };
                 });
-                return setInFK(remote, referencedTable, fkTuples.concat(inFKMapping));
+                return setInFK(
+                    remote,
+                    referencedTable,
+                    fkTuples.concat(inFKMapping)
+                );
             });
         });
 
@@ -90,7 +94,7 @@ function internalAddFK(remote, tableName, fkMap) {
 //
 function getFKs(remote, table_name) {
     const meta_key = keyEncoding.table(table_name);
-    return kv.get(remote, meta_key).then(meta => {
+    return kv.get(remote, meta_key, { fromCache: true }).then(meta => {
         const fks = meta.outfks;
         return fks === undefined ? [] : fks;
     });
@@ -103,7 +107,7 @@ function getFKs(remote, table_name) {
 //
 function getInFKs(remote, table_name) {
     const meta_key = keyEncoding.table(table_name);
-    return kv.get(remote, meta_key).then(meta => {
+    return kv.get(remote, meta_key, { fromCache: true }).then(meta => {
         const fks = meta.infks;
         return fks === undefined ? [] : fks;
     });

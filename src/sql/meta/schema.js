@@ -7,7 +7,7 @@ const keyEncoding = require('./../../db/keyEncoding');
 // If the table doesn't exist, return the empty list
 function getSchema(remote, table_name) {
     const meta_key = keyEncoding.table(table_name);
-    return kv.get(remote, meta_key).then(meta => {
+    return kv.get(remote, meta_key, { fromCache: true }).then(meta => {
         const schema = meta.schema;
         return schema === undefined ? [] : schema;
     });

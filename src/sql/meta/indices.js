@@ -18,22 +18,26 @@ const keyEncoding = require('./../../db/keyEncoding');
 function addIndex(remote, table_name, { index_name, field_names: field_name }) {
     const runnable = tx => {
         const field_names = utils.arreturn(field_name);
-        return schema.validateSchemaSubset(tx, table_name, field_names).then(r => {
-            if (!r) throw new Error("Can't add index on non-existent fields");
-
-            return getIndices(tx, table_name).then(index_table => {
-                const names = index_table.map(st => st.index_name);
-                if (names.includes(index_name)) {
-                    throw new Error(`Can't override index ${index_name}`);
+        return schema
+            .validateSchemaSubset(tx, table_name, field_names)
+            .then(r => {
+                if (!r) {
+                    throw new Error("Can't add index on non-existent fields");
                 }
 
-                return setIndex(
-                    tx,
-                    table_name,
-                    index_table.concat({ index_name, field_names })
-                );
+                return getIndices(tx, table_name).then(index_table => {
+                    const names = index_table.map(st => st.index_name);
+                    if (names.includes(index_name)) {
+                        throw new Error(`Can't override index ${index_name}`);
+                    }
+
+                    return setIndex(
+                        tx,
+                        table_name,
+                        index_table.concat({ index_name, field_names })
+                    );
+                });
             });
-        });
     };
 
     return kv.runT(remote, runnable);
@@ -50,25 +54,37 @@ function addIndex(remote, table_name, { index_name, field_names: field_name }) {
 // In that case, all operations will be executed in the current transaction.
 //
 // TODO: Make unique indices retroactive
-function addUniqueIndex(remote, table_name, { index_name, field_names: field_name }) {
+function addUniqueIndex(
+    remote,
+    table_name,
+    { index_name, field_names: field_name }
+) {
     const runnable = tx => {
         const field_names = utils.arreturn(field_name);
-        return schema.validateSchemaSubset(tx, table_name, field_names).then(r => {
-            if (!r) throw new Error("Can't add unique index on non-existent fields");
-
-            return getUniqueIndices(tx, table_name).then(index_table => {
-                const names = index_table.map(st => st.index_name);
-                if (names.includes(index_name)) {
-                    throw new Error(`Can't override unique index ${index_name}`);
+        return schema
+            .validateSchemaSubset(tx, table_name, field_names)
+            .then(r => {
+                if (!r) {
+                    throw new Error(
+                        "Can't add unique index on non-existent fields"
+                    );
                 }
 
-                return setUniqueIndex(
-                    tx,
-                    table_name,
-                    index_table.concat({ index_name, field_names })
-                );
+                return getUniqueIndices(tx, table_name).then(index_table => {
+                    const names = index_table.map(st => st.index_name);
+                    if (names.includes(index_name)) {
+                        throw new Error(
+                            `Can't override unique index ${index_name}`
+                        );
+                    }
+
+                    return setUniqueIndex(
+                        tx,
+                        table_name,
+                        index_table.concat({ index_name, field_names })
+                    );
+                });
             });
-        });
     };
 
     return kv.runT(remote, runnable);
@@ -81,7 +97,7 @@ function addUniqueIndex(remote, table_name, { index_name, field_names: field_nam
 //
 function getIndices(remote, table_name) {
     const meta_key = keyEncoding.table(table_name);
-    return kv.get(remote, meta_key).then(meta => {
+    return kv.get(remote, meta_key, { fromCache: true }).then(meta => {
         const indices = meta.indices;
         return indices === undefined ? [] : indices;
     });
@@ -94,7 +110,7 @@ function getIndices(remote, table_name) {
 //
 function getUniqueIndices(remote, table_name) {
     const meta_key = keyEncoding.table(table_name);
-    return kv.get(remote, meta_key).then(meta => {
+    return kv.get(remote, meta_key, { fromCache: true }).then(meta => {
         const indices = meta.uindices;
         return indices === undefined ? [] : indices;
     });
@@ -253,7 +269,10 @@ function correlateUniqueIndices(remote, table_name, field_names) {
 function internalCorrelateUniqueIndices(remote, table_name, field_name) {
     const field_names = utils.arreturn(field_name);
 
-    const promises = field_names.map(f => uniqueIndexOfField(remote, table_name, f));
+    const promises = field_names.map(f => {
+        return uniqueIndexOfField(remote, table_name, f);
+    });
+
     return Promise.all(promises).then(results => {
         // Flatten and remove duplicates
         const indices = utils.squash(utils.flatten(results));
@@ -262,9 +281,11 @@ function internalCorrelateUniqueIndices(remote, table_name, field_name) {
         };
 
         const promises = indices.map(index => {
-            return fieldsOfUniqueIndex(remote, table_name, index).then(fields => {
-                return correlate(index, fields);
-            });
+            return fieldsOfUniqueIndex(remote, table_name, index).then(
+                fields => {
+                    return correlate(index, fields);
+                }
+            );
         });
 
         return Promise.all(promises);
@@ -335,7 +356,12 @@ function updateSingleIndexKeys(table, index, fkValue, fieldNames, fieldValues) {
         const fieldValue = fieldValues[ix];
         return [
             // Sentinel super key for scans
-            keyEncoding.raw_index_field_value(table, index, fieldName, fieldValue),
+            keyEncoding.raw_index_field_value(
+                table,
+                index,
+                fieldName,
+                fieldValue
+            ),
             keyEncoding.index_key(table, index, fieldName, fieldValue, fkValue)
         ];
     });
@@ -385,7 +411,13 @@ function updateUniqueIndices(remote, table, fkValue, mapping) {
 }
 
 // TODO: Generate super keys if we want sequential scans over unique indices
-function updateSingleUniqueIndex(table, index, fk_value, field_names, field_values) {
+function updateSingleUniqueIndex(
+    table,
+    index,
+    fk_value,
+    field_names,
+    field_values
+) {
     const uindex_keys = updateSingleUniqueIndexKeys(
         table,
         index,
@@ -424,21 +456,23 @@ function pruneRowIndices(remote, table, fkValue, row) {
     const correlated = correlateIndices(remote, table, fieldNames);
 
     return correlated.then(relation => {
-        const nested_sentinelKeys = relation.map(({ index_name, field_names }) => {
-            const fieldValues = field_names.map(f => row[f]);
-            // FIXME: Assumes that it only returns two keys
-            // Won't be the case if we support multi-field indices
-            const [sentinel, indexKey] = updateSingleIndexKeys(
-                table,
-                index_name,
-                fkValue,
-                field_names,
-                fieldValues
-            );
+        const nested_sentinelKeys = relation.map(
+            ({ index_name, field_names }) => {
+                const fieldValues = field_names.map(f => row[f]);
+                // FIXME: Assumes that it only returns two keys
+                // Won't be the case if we support multi-field indices
+                const [sentinel, indexKey] = updateSingleIndexKeys(
+                    table,
+                    index_name,
+                    fkValue,
+                    field_names,
+                    fieldValues
+                );
 
-            kv.removeKey(remote, table, indexKey);
-            return sentinel;
-        });
+                kv.removeKey(remote, table, indexKey);
+                return sentinel;
+            }
+        );
 
         const sentinelKeys = utils.flatten(nested_sentinelKeys);
         sentinelKeys.forEach(sentinel => {
@@ -453,7 +487,12 @@ function pruneRowIndices(remote, table, fkValue, row) {
 }
 
 function pruneUniqueIndices(remote, table, rows, updatedFields) {
-    const f_touchedIndices = correlateUniqueIndices(remote, table, updatedFields);
+    const f_touchedIndices = correlateUniqueIndices(
+        remote,
+        table,
+        updatedFields
+    );
+
     const f_needsPrune = f_touchedIndices.then(touchedIndices => {
         return touchedIndices.length > 0;
     });
@@ -489,8 +528,8 @@ function pruneRowUniqueIndices(remote, table, row) {
             kv.removeKey(remote, table, key);
         });
 
-        const nulls = [...new Array(keys.length)].fill(null)
-        return kv.put(remote, keys, nulls)
+        const nulls = [...new Array(keys.length)].fill(null);
+        return kv.put(remote, keys, nulls);
     });
 }
 

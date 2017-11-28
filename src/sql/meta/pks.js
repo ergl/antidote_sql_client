@@ -9,7 +9,7 @@ const keyEncoding = require('./../../db/keyEncoding');
 //
 function getPKField(remote, table_name) {
     const meta_key = keyEncoding.table(table_name);
-    return kv.get(remote, meta_key).then(meta => {
+    return kv.get(remote, meta_key, { fromCache: true }).then(meta => {
         const pk_field = meta.primary_key_field;
         if (pk_field === undefined) {
             throw new Error(`Fatal: ${table_name} doesn't have a primary key`);
