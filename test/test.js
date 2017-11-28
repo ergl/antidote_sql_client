@@ -428,6 +428,7 @@ const toRun = [
     autoCounterTest,
     wwConflictTest,
     foreignKeyTest,
+    uniqueIndexTest,
     joinCheck,
     // Other tests
     cacheTest
