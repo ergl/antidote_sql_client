@@ -124,9 +124,7 @@ function scanFast(remote, table, pkValue) {
         .then(validRange => {
             if (!validRange) {
                 throw new Error(
-                    `scanFast of keys ${pkValues} on ${
-                        table
-                    } went out of valid range`
+                    `scanFast of keys ${pkValues} on ${table} went out of valid range`
                 );
             }
 
