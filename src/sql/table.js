@@ -316,7 +316,8 @@ function internalSelect(remote, fields, table, predicate) {
 }
 
 // predicate:
-// { using: [a.field, b.field], (interpreted as where a.field = b.field, ...
+// { using: [field_a, field_b], (interpreted as where x.field_a = y.field_b, ...
+//                               where x and y are the tables in select - in the same order)
 //   [table]: { [table.field]: value (same as any select predicate)
 // }
 function internalJoin(remote, fields, tables, predicate) {
