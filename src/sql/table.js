@@ -1,3 +1,5 @@
+// @ts-check
+
 const assert = require('assert');
 
 const utils = require('../utils');
@@ -315,29 +317,33 @@ function internalSelect(remote, fields, table, predicate) {
     });
 }
 
-// predicate:
-// { using: [field_a, field_b], (interpreted as where x.field_a = y.field_b, ...
-//                               where x and y are the tables in select - in the same order)
-//   [table]: { [table.field]: value (same as any select predicate)
+// predicate: {
+// using: [ { A:field_a, B:field_b }, ... ]
+// -- interpreted as where A.field_a = B.field_b AND ...
+// [table]: { [table.field]: value (same as any select predicate)
 // }
-function internalJoin(remote, fields, tables, predicate) {
-    const validPredicate = validateJoinPredicate(tables, predicate);
-    const onFields = validPredicate.using;
-    const prefixedFields = onFields.map((f, ix) => prefixField(tables[ix], f));
+function internalJoin(remote, fields, tables, joinPredicate) {
+    const validPredicate = validateJoinPredicate(tables, joinPredicate);
+    const usingMap = validPredicate.using;
 
     // Get all tables and prefix them
     // TODO: Don't fetch all fields, just the ones we need
     const gatherAll = tables.map(table => {
         const tablePredicate = validPredicate[table];
         return select(remote, '*', table, tablePredicate).then(r => {
+            // Put extra information for multi-way join
+            if (tables.length >= 3) {
+                return { table: table, rows: prefixTableName(table, r) };
+            }
+
             return prefixTableName(table, r);
         });
     });
 
     const f_rows = Promise.all(gatherAll);
 
-    return f_rows.then(allRows => {
-        const joined = multiInnerJoin(allRows, prefixedFields);
+    return f_rows.then(markedRows => {
+        const joined = multiInnerJoin(markedRows, usingMap);
 
         if (joined.length === 0) {
             return joined;
@@ -359,16 +365,68 @@ function internalJoin(remote, fields, tables, predicate) {
 }
 
 function validateJoinPredicate(tables, predicate) {
-    const joinFields = predicate['using'];
-    if (joinFields === undefined) {
+    const usingMap = predicate['using'];
+    if (usingMap === undefined) {
         throw new Error(
             `join: Wrong predicate on ${tables}. Remember to use a 'using' predicate`
         );
     }
 
     return Object.assign(predicate, {
-        using: validateJoinFields(tables, joinFields)
+        using: validateUsingMap(tables, usingMap)
     });
+}
+
+// For each entry, collect the keys, and make sure they match with the
+// given tables
+// The shape of an usingMap is:
+// const using = [
+//     {
+//         tableA: 'fieldA',
+//         tableB: 'fieldB'
+//     },
+//     ...
+// ];
+// interpreted as WHERE tableA.fieldA = tableB.fieldB
+// AND ...
+function validateUsingMap(queriedTables, usingMap) {
+    const usingMaps = utils.arreturn(usingMap);
+
+    const keySet = new Set();
+
+    const transformed = usingMaps.map(entry => {
+        const entryKeys = Object.keys(entry);
+        if (entryKeys.length != 2) {
+            throw new Error(
+                'join: Each predicate entry should at least have two tables'
+            );
+        }
+
+        entryKeys.forEach(key => {
+            keySet.add(key);
+            if (!queriedTables.includes(key)) {
+                throw new Error(
+                    `join: Unknown table ${key}. Check the 'tables' key`
+                );
+            }
+        });
+
+        return utils.mapO(entry, (key, value) => {
+            return {
+                [key]: prefixField(key, value)
+            };
+        });
+    });
+
+    for (let table of queriedTables) {
+        if (!keySet.has(table)) {
+            throw new Error(
+                `join: Missing table ${table}. Check the 'tables' field`
+            );
+        }
+    }
+
+    return transformed;
 }
 
 function validateJoinFields(tables, onField) {
@@ -412,7 +470,7 @@ function innerJoin(lRows, rRows, lField, rField) {
         const lval = lRow[lField];
         const matches = rRows.filter(rRow => rRow[rField] === lval);
         const nestedCombine = matches.map(match => {
-            return combine(lRow, match, lField, rField);
+            return Object.assign(lRow, match);
         });
         return utils.flatten(nestedCombine);
     });
@@ -420,19 +478,36 @@ function innerJoin(lRows, rRows, lField, rField) {
     return utils.flatten(nestedRows);
 }
 
-// Same as innerJoin, but for an arbitrary number of tables
-// Assumes at least two lists of rows and an equal number of fields
-function multiInnerJoin(nestedRows, onFields) {
-    const [first, ...rest] = nestedRows;
-    return rest.reduce((acc, curr, ix) => {
-        return innerJoin(acc, curr, onFields[ix], onFields[ix + 1]);
-    }, first);
-}
+function multiInnerJoin(markedRows, usingMap) {
+    if (markedRows.length === 2) {
+        const [lField, rField] = Object.keys(usingMap[0]);
+        const [lRows, rRows] = markedRows;
+        return innerJoin(lRows, rRows, lField, rField);
+    }
 
-function combine(lrow, rrow, onl, onr = onl) {
-    const comb = Object.assign(lrow, rrow);
-    if (onl === onr) return comb;
-    return utils.filterOKeys(comb, f => f !== onr);
+    let target = null;
+
+    for (let map of usingMap) {
+        const selectedTables = Object.keys(map);
+        const [lTable, rTable] = selectedTables;
+        const selectedRows = selectedTables.map(table => {
+            return utils.flatten(
+                markedRows
+                    .filter(nestedRow => nestedRow.table === table)
+                    .map(entry => {
+                        return entry.rows;
+                    })
+            );
+        });
+        const [lRows, rRows] = selectedRows;
+        if (target === null) {
+            target = innerJoin(lRows, rRows, map[lTable], map[rTable]);
+        } else {
+            target = innerJoin(target, rRows, map[lTable], map[rTable]);
+        }
+    }
+
+    return target;
 }
 
 function update(remote, table, mapping, predicate) {
