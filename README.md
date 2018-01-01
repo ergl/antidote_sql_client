@@ -122,7 +122,7 @@ antidoteSQL.select(conn, ['name', 'lastName'], 'employee', {
 //   FROM employee, department
 //  WHERE employee.department = department.depId
 antidoteSQL.select(conn, '*', ['employee', 'department'], {
-    using: ['department', 'depId']
+    using: { employee: 'department', departmend: 'depId' }
 });
 // Returns:
 // [ { employee.empId: 1,
