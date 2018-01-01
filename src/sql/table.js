@@ -480,7 +480,10 @@ function innerJoin(lRows, rRows, lField, rField) {
 
 function multiInnerJoin(markedRows, usingMap) {
     if (markedRows.length === 2) {
-        const [lField, rField] = Object.keys(usingMap[0]);
+        const map = usingMap[0];
+        const [lField, rField] = Object.keys(map).map(k => {
+            return map[k];
+        });
         const [lRows, rRows] = markedRows;
         return innerJoin(lRows, rRows, lField, rField);
     }
