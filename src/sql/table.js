@@ -1,3 +1,5 @@
+// @ts-check
+
 const assert = require('assert');
 
 const utils = require('../utils');
@@ -21,7 +23,10 @@ function create(remote, name, schema) {
     // TODO: Use locale-sensitive sort?
     const [pk_field, ...rest] = schema;
     rest.sort();
-    return tableMetadata.createMeta(remote, name, pk_field, [pk_field, ...rest]);
+    return tableMetadata.createMeta(remote, name, pk_field, [
+        pk_field,
+        ...rest
+    ]);
 }
 
 // See internalInsert for details.
@@ -68,10 +73,12 @@ function internalInsert(remote, table, mapping) {
             // Inserts must specify every field, don't allow nulls by default
             // Easily solvable by inserting a bottom value.
             // TODO: Add bottom value for nullable fields
-            return schema.validateSchema(remote, table, insertFields).then(r => {
-                if (!r) throw new Error('Invalid schema');
-                return checkOutFKViolation(remote, table, mapping);
-            });
+            return schema
+                .validateSchema(remote, table, insertFields)
+                .then(r => {
+                    if (!r) throw new Error('Invalid schema');
+                    return checkOutFKViolation(remote, table, mapping);
+                });
         })
         .then(valid => {
             if (!valid) throw new Error('FK constraint failed');
@@ -102,7 +109,9 @@ function rawInsert(remote, table, pkValue, mapping) {
     return kv
         .put(remote, keys, values)
         .then(_ => indices.updateIndices(remote, table, pkValue, mapping))
-        .then(_ => indices.updateUniqueIndices(remote, table, pkValue, mapping));
+        .then(_ => {
+            return indices.updateUniqueIndices(remote, table, pkValue, mapping);
+        });
 }
 
 // Given a table, and a map of updated field names to their values,
@@ -129,28 +138,34 @@ function checkOutFKViolation(remote, table, newRow) {
     // We can check if a specific row exists by checking it its less or equal to the keyrange
     // The actual logic for the cutoff is implemented inside select
     return f_relation.then(relation => {
-        const validChecks = relation.map(({ reference_table, field_name, alias }) => {
-            const range = newRow[alias];
-            // FIXME: Change if FK can be against non-primary fields
-            const f_select = select(remote, field_name, reference_table, {
-                [field_name]: range
-            });
-
-            return f_select
-                .then(rows => {
-                    // FIXME: Use unique index instead
-                    assert(rows.length === 1);
-                    const row = rows[0];
-                    return row[field_name] === newRow[alias];
-                })
-                // TODO: Tag cutoff error
-                .catch(cutoff_error => {
-                    console.log(cutoff_error);
-                    return false;
+        const validChecks = relation.map(
+            ({ reference_table, field_name, alias }) => {
+                const range = newRow[alias];
+                // FIXME: Change if FK can be against non-primary fields
+                const f_select = select(remote, field_name, reference_table, {
+                    [field_name]: range
                 });
-        });
 
-        return Promise.all(validChecks).then(allChecks => allChecks.every(Boolean));
+                return (
+                    f_select
+                        .then(rows => {
+                            // FIXME: Use unique index instead
+                            assert(rows.length === 1);
+                            const row = rows[0];
+                            return row[field_name] === newRow[alias];
+                        })
+                        // TODO: Tag cutoff error
+                        .catch(cutoff_error => {
+                            console.log(cutoff_error);
+                            return false;
+                        })
+                );
+            }
+        );
+
+        return Promise.all(validChecks).then(allChecks => {
+            return allChecks.every(Boolean);
+        });
     });
 }
 
@@ -180,25 +195,34 @@ function checkInFKViolation(remote, table, oldRow, fieldsToUpdate) {
     // We can check if a specific row exists by checking it its less or equal to the keyrange
     // The actual logic for the cutoff is implemented inside select
     return f_inFKs.then(inFKs => {
-        const validChecks = inFKs.map(({ reference_table, field_name, alias }) => {
-            // If the update doesn't concern a referenced field, skip
-            if (!fieldsToUpdate.includes(field_name)) {
-                return true;
+        const validChecks = inFKs.map(
+            ({ reference_table, field_name, alias }) => {
+                // If the update doesn't concern a referenced field, skip
+                if (!fieldsToUpdate.includes(field_name)) {
+                    return true;
+                }
+
+                // The predicate will be "WHERE alias = OLD_FK_VALUE"
+                // This should return 0 rows to be value
+                const predicate = { [alias]: oldRow[field_name] };
+                const f_select = select(
+                    remote,
+                    alias,
+                    reference_table,
+                    predicate
+                );
+
+                // In this case, a cutoff error should not happen,
+                // as we're selecting a non-pk value
+                return f_select.then(rows => {
+                    return rows.length === 0;
+                });
             }
+        );
 
-            // The predicate will be "WHERE alias = OLD_FK_VALUE"
-            // This should return 0 rows to be value
-            const predicate = { [alias]: oldRow[field_name] };
-            const f_select = select(remote, alias, reference_table, predicate);
-
-            // In this case, a cutoff error should not happen,
-            // as we're selecting a non-pk value
-            return f_select.then(rows => {
-                return rows.length === 0;
-            });
+        return Promise.all(validChecks).then(allChecks => {
+            return allChecks.every(Boolean);
         });
-
-        return Promise.all(validChecks).then(allChecks => allChecks.every(Boolean));
     });
 }
 
@@ -258,7 +282,11 @@ function internalSelect(remote, fields, table, predicate) {
     return f_validPredicate.then(validPredicate => {
         return f_queriedFields.then(queriedFields => {
             return f_validPredicateFields.then(predicateFields => {
-                const f_scanFn = scan.selectScanFn(remote, table, predicateFields);
+                const f_scanFn = scan.selectScanFn(
+                    remote,
+                    table,
+                    predicateFields
+                );
 
                 return f_scanFn
                     .then(scanFn => {
@@ -268,7 +296,9 @@ function internalSelect(remote, fields, table, predicate) {
                         // Filter only the rows that satisfy the predicate
                         const filtered = rows.filter(row => {
                             const valid = predicateFields.map(field => {
-                                const matchValues = utils.arreturn(validPredicate[field]);
+                                const matchValues = utils.arreturn(
+                                    validPredicate[field]
+                                );
                                 return matchValues.includes(row[field]);
                             });
 
@@ -277,8 +307,9 @@ function internalSelect(remote, fields, table, predicate) {
 
                         // Extract only the queried fields
                         return filtered.map(row => {
-                            return utils.filterOKeys(row, key =>
-                                queriedFields.includes(key));
+                            return utils.filterOKeys(row, key => {
+                                return queriedFields.includes(key);
+                            });
                         });
                     });
             });
@@ -286,28 +317,33 @@ function internalSelect(remote, fields, table, predicate) {
     });
 }
 
-// predicate:
-// { using: [a.field, b.field], (interpreted as where a.field = b.field, ...
-//   [table]: { [table.field]: value (same as any select predicate)
+// predicate: {
+// using: [ { A:field_a, B:field_b }, ... ]
+// -- interpreted as where A.field_a = B.field_b AND ...
+// [table]: { [table.field]: value (same as any select predicate)
 // }
-function internalJoin(remote, fields, tables, predicate) {
-    const validPredicate = validateJoinPredicate(tables, predicate);
-    const onFields = validPredicate.using;
-    const prefixedFields = onFields.map((f, ix) => prefixField(tables[ix], f));
+function internalJoin(remote, fields, tables, joinPredicate) {
+    const validPredicate = validateJoinPredicate(tables, joinPredicate);
+    const usingMap = validPredicate.using;
 
     // Get all tables and prefix them
     // TODO: Don't fetch all fields, just the ones we need
     const gatherAll = tables.map(table => {
         const tablePredicate = validPredicate[table];
         return select(remote, '*', table, tablePredicate).then(r => {
+            // Put extra information for multi-way join
+            if (tables.length >= 3) {
+                return { table: table, rows: prefixTableName(table, r) };
+            }
+
             return prefixTableName(table, r);
         });
     });
 
     const f_rows = Promise.all(gatherAll);
 
-    return f_rows.then(allRows => {
-        const joined = multiInnerJoin(allRows, prefixedFields);
+    return f_rows.then(markedRows => {
+        const joined = multiInnerJoin(markedRows, usingMap);
 
         if (joined.length === 0) {
             return joined;
@@ -329,14 +365,68 @@ function internalJoin(remote, fields, tables, predicate) {
 }
 
 function validateJoinPredicate(tables, predicate) {
-    const joinFields = predicate['using'];
-    if (joinFields === undefined) {
+    const usingMap = predicate['using'];
+    if (usingMap === undefined) {
         throw new Error(
             `join: Wrong predicate on ${tables}. Remember to use a 'using' predicate`
         );
     }
 
-    return Object.assign(predicate, { using: validateJoinFields(tables, joinFields) });
+    return Object.assign(predicate, {
+        using: validateUsingMap(tables, usingMap)
+    });
+}
+
+// For each entry, collect the keys, and make sure they match with the
+// given tables
+// The shape of an usingMap is:
+// const using = [
+//     {
+//         tableA: 'fieldA',
+//         tableB: 'fieldB'
+//     },
+//     ...
+// ];
+// interpreted as WHERE tableA.fieldA = tableB.fieldB
+// AND ...
+function validateUsingMap(queriedTables, usingMap) {
+    const usingMaps = utils.arreturn(usingMap);
+
+    const keySet = new Set();
+
+    const transformed = usingMaps.map(entry => {
+        const entryKeys = Object.keys(entry);
+        if (entryKeys.length != 2) {
+            throw new Error(
+                'join: Each predicate entry should at least have two tables'
+            );
+        }
+
+        entryKeys.forEach(key => {
+            keySet.add(key);
+            if (!queriedTables.includes(key)) {
+                throw new Error(
+                    `join: Unknown table ${key}. Check the 'tables' key`
+                );
+            }
+        });
+
+        return utils.mapO(entry, (key, value) => {
+            return {
+                [key]: prefixField(key, value)
+            };
+        });
+    });
+
+    for (let table of queriedTables) {
+        if (!keySet.has(table)) {
+            throw new Error(
+                `join: Missing table ${table}. Check the 'tables' field`
+            );
+        }
+    }
+
+    return transformed;
 }
 
 function validateJoinFields(tables, onField) {
@@ -348,7 +438,9 @@ function validateJoinFields(tables, onField) {
             return [...new Array(tables.length)].fill(onField);
         } else {
             throw new Error(
-                `join: Wrong number of predicate fields. Expected ${tables.length}, got ${onFields.length}`
+                `join: Wrong number of predicate fields. Expected ${
+                    tables.length
+                }, got ${onFields.length}`
             );
         }
     }
@@ -377,29 +469,45 @@ function innerJoin(lRows, rRows, lField, rField) {
     const nestedRows = lRows.map(lRow => {
         const lval = lRow[lField];
         const matches = rRows.filter(rRow => rRow[rField] === lval);
-        const nestedCombine = matches.map(match => combine(lRow, match, lField, rField));
+        const nestedCombine = matches.map(match => {
+            return Object.assign(lRow, match);
+        });
         return utils.flatten(nestedCombine);
     });
 
     return utils.flatten(nestedRows);
 }
 
-// Same as innerJoin, but for an arbitrary number of tables
-// Assumes at least two lists of rows and an equal number of fields
-function multiInnerJoin(nestedRows, onFields) {
-    const [first, ...rest] = nestedRows;
-    return rest.reduce(
-        (acc, curr, ix) => {
-            return innerJoin(acc, curr, onFields[ix], onFields[ix + 1]);
-        },
-        first
-    );
-}
+function multiInnerJoin(markedRows, usingMap) {
+    if (markedRows.length === 2) {
+        const [lField, rField] = Object.keys(usingMap[0]);
+        const [lRows, rRows] = markedRows;
+        return innerJoin(lRows, rRows, lField, rField);
+    }
 
-function combine(lrow, rrow, onl, onr = onl) {
-    const comb = Object.assign(lrow, rrow);
-    if (onl === onr) return comb;
-    return utils.filterOKeys(comb, f => f !== onr);
+    let target = null;
+
+    for (let map of usingMap) {
+        const selectedTables = Object.keys(map);
+        const [lTable, rTable] = selectedTables;
+        const selectedRows = selectedTables.map(table => {
+            return utils.flatten(
+                markedRows
+                    .filter(nestedRow => nestedRow.table === table)
+                    .map(entry => {
+                        return entry.rows;
+                    })
+            );
+        });
+        const [lRows, rRows] = selectedRows;
+        if (target === null) {
+            target = innerJoin(lRows, rRows, map[lTable], map[rTable]);
+        } else {
+            target = innerJoin(target, rRows, map[lTable], map[rTable]);
+        }
+    }
+
+    return target;
 }
 
 function update(remote, table, mapping, predicate) {
@@ -413,94 +521,106 @@ function internalUpdate(remote, table, mapping, predicate) {
 
     const f_pkNotPresent = pks.containsPK(remote, table, fieldsToUpdate);
 
-    return f_pkNotPresent
-        // Check if trying to update a primary key
-        // If it is, abort the transaction
-        .then(({ contained, pkField }) => {
-            if (contained) {
-                throw new Error(
-                    `Updates to autoincremented primary keys are not allowed`
-                );
-            }
-
-            const f_oldRows = select(remote, '*', table, predicate);
-
-            // Check if any of the affected rows is being referenced by another table
-            const f_rowsWereNotReferenced = f_oldRows.then(oldRows => {
-                const f_checks = oldRows.map(oldRow => {
-                    return checkInFKViolation(remote, table, oldRow, fieldsToUpdate);
-                });
-
-                return Promise.all(f_checks).then(checks => {
-                    return checks.every(Boolean);
-                });
-            });
-
-            const wait = Promise.all([f_oldRows, f_rowsWereNotReferenced]);
-            return wait.then(([oldRows, rowsWereNotReferenced]) => {
-                return { oldRows, rowsWereNotReferenced, pkField };
-            });
-        })
-        .then(({ oldRows, rowsWereNotReferenced, pkField }) => {
-            // If any of the old rows was referenced, abort the transaction
-            if (!rowsWereNotReferenced) {
-                throw new Error(
-                    `Can't update table ${table} as it is referenced by another table`
-                );
-            }
-
-            const updatedRows = oldRows.map(oldRow => {
-                return utils.mapO(oldRow, (k, oldValue) => {
-                    let newValue;
-                    if (fieldsToUpdate.includes(k)) {
-                        const update = mapping[k];
-                        // We might pass a function that receives the old value
-                        newValue = utils.isFunction(update) ? update(oldValue) : update;
-                    } else {
-                        newValue = oldValue;
-                    }
-                    return { [k]: newValue };
-                });
-            });
-
-            const f_inserts = updatedRows.map(row => {
-                // Our foreign key guarantees say
-                // A value X in a child column may only be updated to a value Y
-                // if Y exists in the parent column.
-                // This will check that the new row satisifies this point
-                // If it violates the guarantee, abort the transaction
-                const validFKs = checkOutFKViolation(remote, table, row);
-
-                return validFKs.then(valid => {
-                    if (!valid) throw new Error('FK constraint failed');
-
-                    const pkValue = row[pkField];
-                    const mapping = utils.filterOKeys(row, k => k !== pkField);
-                    return rawInsert(remote, table, pkValue, mapping);
-                });
-            });
-
-            const fkValues = updatedRows.map(row => row[pkField]);
-
-            return Promise.all(f_inserts)
-                .then(_ => {
-                    return indices.pruneIndices(
-                        remote,
-                        table,
-                        fkValues,
-                        oldRows,
-                        fieldsToUpdate
+    return (
+        f_pkNotPresent
+            // Check if trying to update a primary key
+            // If it is, abort the transaction
+            .then(({ contained, pkField }) => {
+                if (contained) {
+                    throw new Error(
+                        `Updates to autoincremented primary keys are not allowed`
                     );
-                })
-                .then(_ => {
-                    return indices.pruneUniqueIndices(
-                        remote,
-                        table,
-                        oldRows,
-                        fieldsToUpdate
-                    );
+                }
+
+                const f_oldRows = select(remote, '*', table, predicate);
+
+                // Check if any of the affected rows is being referenced by another table
+                const f_rowsWereNotReferenced = f_oldRows.then(oldRows => {
+                    const f_checks = oldRows.map(oldRow => {
+                        return checkInFKViolation(
+                            remote,
+                            table,
+                            oldRow,
+                            fieldsToUpdate
+                        );
+                    });
+
+                    return Promise.all(f_checks).then(checks => {
+                        return checks.every(Boolean);
+                    });
                 });
-        });
+
+                const wait = Promise.all([f_oldRows, f_rowsWereNotReferenced]);
+                return wait.then(([oldRows, rowsWereNotReferenced]) => {
+                    return { oldRows, rowsWereNotReferenced, pkField };
+                });
+            })
+            .then(({ oldRows, rowsWereNotReferenced, pkField }) => {
+                // If any of the old rows was referenced, abort the transaction
+                if (!rowsWereNotReferenced) {
+                    throw new Error(
+                        `Can't update table ${table} as it is referenced by another table`
+                    );
+                }
+
+                const updatedRows = oldRows.map(oldRow => {
+                    return utils.mapO(oldRow, (k, oldValue) => {
+                        let newValue;
+                        if (fieldsToUpdate.includes(k)) {
+                            const update = mapping[k];
+                            // We might pass a function that receives the old value
+                            newValue = utils.isFunction(update)
+                                ? update(oldValue)
+                                : update;
+                        } else {
+                            newValue = oldValue;
+                        }
+                        return { [k]: newValue };
+                    });
+                });
+
+                const f_inserts = updatedRows.map(row => {
+                    // Our foreign key guarantees say
+                    // A value X in a child column may only be updated to a value Y
+                    // if Y exists in the parent column.
+                    // This will check that the new row satisifies this point
+                    // If it violates the guarantee, abort the transaction
+                    const validFKs = checkOutFKViolation(remote, table, row);
+
+                    return validFKs.then(valid => {
+                        if (!valid) throw new Error('FK constraint failed');
+
+                        const pkValue = row[pkField];
+                        const mapping = utils.filterOKeys(
+                            row,
+                            k => k !== pkField
+                        );
+                        return rawInsert(remote, table, pkValue, mapping);
+                    });
+                });
+
+                const fkValues = updatedRows.map(row => row[pkField]);
+
+                return Promise.all(f_inserts)
+                    .then(_ => {
+                        return indices.pruneIndices(
+                            remote,
+                            table,
+                            fkValues,
+                            oldRows,
+                            fieldsToUpdate
+                        );
+                    })
+                    .then(_ => {
+                        return indices.pruneUniqueIndices(
+                            remote,
+                            table,
+                            oldRows,
+                            fieldsToUpdate
+                        );
+                    });
+            })
+    );
 }
 
 // For queries, a missing predicate should implicitly satisfy
@@ -512,11 +632,13 @@ function validatePredicate(remote, table, predicate) {
     const f_pkField = pks.getPKField(remote, table);
     const f_maxPkValue = pks.getCurrentKey(remote, table);
 
-    return Promise.all([f_pkField, f_maxPkValue]).then(([pkField, maxPkValue]) => {
-        const pkRange = [...new Array(maxPkValue + 1).keys()];
-        pkRange.shift();
-        return { [pkField]: pkRange };
-    });
+    return Promise.all([f_pkField, f_maxPkValue]).then(
+        ([pkField, maxPkValue]) => {
+            const pkRange = [...new Array(maxPkValue + 1).keys()];
+            pkRange.shift();
+            return { [pkField]: pkRange };
+        }
+    );
 }
 
 function validateQueriedFields(remote, table, field) {
@@ -527,7 +649,9 @@ function validateQueriedFields(remote, table, field) {
 
     return schema.validateSchemaSubset(remote, table, queriedFields).then(r => {
         if (!r) {
-            throw new Error(`Invalid query fields ${queriedFields} on table ${table}`);
+            throw new Error(
+                `Invalid query fields ${queriedFields} on table ${table}`
+            );
         }
 
         return queriedFields;
@@ -537,15 +661,17 @@ function validateQueriedFields(remote, table, field) {
 function validatePredicateFields(remote, table, field) {
     const predicateFields = utils.arreturn(field);
 
-    return schema.validateSchemaSubset(remote, table, predicateFields).then(r => {
-        if (!r) {
-            throw new Error(
-                `Invalid predicate fields ${predicateFields} on table ${table}`
-            );
-        }
+    return schema
+        .validateSchemaSubset(remote, table, predicateFields)
+        .then(r => {
+            if (!r) {
+                throw new Error(
+                    `Invalid predicate fields ${predicateFields} on table ${table}`
+                );
+            }
 
-        return predicateFields;
-    });
+            return predicateFields;
+        });
 }
 
 function reset(remote) {

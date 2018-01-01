@@ -17,63 +17,60 @@ Some explanations about the current architecture can be found in [architecture.m
 ### Usage
 
 ```js
-const antidoteSQL = require("antidote_sql_client")
+const antidoteSQL = require('antidote_sql_client');
 
 // Open a connection
-const conn = antidoteSQL.connect(8087, "127.0.0.1")
+const conn = antidoteSQL.connect(8087, '127.0.0.1');
 
 // Create a new table
 // NOTE: The first field will be chosen as the primary key
-antidoteSQL.createTable(conn, "employee", [
-    "empId",
-    "name",
-    "lastName",
-    "username",
-    "department"
-])
+antidoteSQL.createTable(conn, 'employee', [
+    'empId',
+    'name',
+    'lastName',
+    'username',
+    'department'
+]);
 
-antidoteSQL.createTable(conn, "department", [
-    "depId",
-    "departmentName"
-])
+antidoteSQL.createTable(conn, 'department', ['depId', 'departmentName']);
 
 // Create a foreign key
-antidoteSQL.createFK(conn, "employee", {
-    alias: "department",
-    field_name: "depId",
-    reference_table: "department"
-})
+antidoteSQL.createFK(conn, 'employee', {
+    alias: 'department',
+    field_name: 'depId',
+    reference_table: 'department'
+});
 
 // Create a new index
-antidoteSQL.createIndex(conn, "employee", {
-    index_name: "employee_name",
-    field_names: "name"
-})
+antidoteSQL.createIndex(conn, 'employee', {
+    index_name: 'employee_name',
+    field_names: 'name'
+});
 
 // Create a new unique index
-antidoteSQL.createUniqueIndex(conn, "employee", {
-    index_name: "employee_username",
-    field_names: "username"
-})
+antidoteSQL.createUniqueIndex(conn, 'employee', {
+    index_name: 'employee_username',
+    field_names: 'username'
+});
 
 // Inserts
-antidoteSQL.insert(conn, "department", {
-    departmentName: "sales"
-})
+antidoteSQL.insert(conn, 'department', {
+    departmentName: 'sales'
+});
 
-antidoteSQL.insert(conn, "employee", {
-    username: "someUsername",
-    name: "John",
-    lastName: "Doe",
+antidoteSQL.insert(conn, 'employee', {
+    username: 'someUsername',
+    name: 'John',
+    lastName: 'Doe',
     department: 1
-})
+});
 
-antidoteSQL.insert(conn, "employee", {
-    username: "anotherUsername",
-    name: "Sally",
-    lastName: "Mann",
+antidoteSQL.insert(conn, 'employee', {
+    username: 'anotherUsername',
+    name: 'Sally',
+    lastName: 'Mann',
     department: 1
-})
+});
 
 // Selects
 
@@ -95,12 +92,12 @@ antidoteSQL.insert(conn, "employee", {
 // Supports for wildard select by using "*" instead of a field array.
 // If no predicate is used, it will scan the whole table.
 
-antidoteSQL.select(conn, "*", "employee")
+antidoteSQL.select(conn, '*', 'employee');
 // Returns:
 // [ { empId: 1,
 //     name: "John",
-//     lastName: "Doe", 
-//     userName: "someUsername", 
+//     lastName: "Doe",
+//     userName: "someUsername",
 //     department: 1 },
 //   { empId: 2,
 //     name: "Sally",
@@ -112,10 +109,10 @@ antidoteSQL.select(conn, "*", "employee")
 // SELECT name, lastName
 //   FROM employee
 //  WHERE name IN ("John", "Sally") AND department = 1
-antidoteSQL.select(conn, ["name", "lastName"], "employee", {
-    name: ["John", "Sally"],
+antidoteSQL.select(conn, ['name', 'lastName'], 'employee', {
+    name: ['John', 'Sally'],
     department: 1
-})
+});
 // Returns:
 // [ { name: "John", lastName: "Doe" }, { name: "Sally", lastName: "Mann" }]
 
@@ -124,9 +121,9 @@ antidoteSQL.select(conn, ["name", "lastName"], "employee", {
 // SELECT *
 //   FROM employee, department
 //  WHERE employee.department = department.depId
-antidoteSQL.select(conn, "*", ["employee", "department"], {
-    using: ["department", "depId"]
-})
+antidoteSQL.select(conn, '*', ['employee', 'department'], {
+    using: { employee: 'department', departmend: 'depId' }
+});
 // Returns:
 // [ { employee.empId: 1,
 //     employee.name: "John",
@@ -146,9 +143,14 @@ antidoteSQL.select(conn, "*", ["employee", "department"], {
 // UPDATE employee
 //    SET userName = aRealUserName
 //  WHERE empId = 1
-antidoteSQL.update(conn, "employee", {
-    userName: "aRealUserName"
-}, { empId: 1 })
+antidoteSQL.update(
+    conn,
+    'employee',
+    {
+        userName: 'aRealUserName'
+    },
+    { empId: 1 }
+);
 
 // You can also operate on old values, by using a function.
 // NOTE: Use with caution. Everyone will judge you if you do nasty things here.
@@ -163,12 +165,17 @@ antidoteSQL.update(conn, "employee", {
 // UPDATE employee
 //    SET userName = "not" || previousName (postgres syntax for string concatenation)
 //  WHERE empId = 1
-antidoteSQL.update(conn, "employee", {
-    userName: previousName => "not" + previousName
-}, { empId: 1 })
+antidoteSQL.update(
+    conn,
+    'employee',
+    {
+        userName: previousName => 'not' + previousName
+    },
+    { empId: 1 }
+);
 
 // Close connection
-antidoteSQL.close(conn)
+antidoteSQL.close(conn);
 ```
 
 ### Transaction support
@@ -181,23 +188,22 @@ transaction, if any. To chain together operations, one must
 do so with promises. Like so:
 
 ```js
-const conn = antidoteSQL.connect(8087, "127.0.0.1")
+const conn = antidoteSQL.connect(8087, '127.0.0.1');
 
-antidoteSQL.createTable(remote, "sampleTable", [
-      "tableId",
-      "tableFieldA",
-]).then(_ => {
-    return antidoteSQL.createIndex(remote, "sampleTable", {
-        index_name: "someIndex",
-        field_names: "tableFieldA"
+antidoteSQL
+    .createTable(remote, 'sampleTable', ['tableId', 'tableFieldA'])
+    .then(_ => {
+        return antidoteSQL.createIndex(remote, 'sampleTable', {
+            index_name: 'someIndex',
+            field_names: 'tableFieldA'
+        });
     })
-}).then(_ => {
-    return antidoteSQL.insert(remote, "sampleTable", {
-        tableFieldA: "someValue"
-    })
-})
+    .then(_ => {
+        return antidoteSQL.insert(remote, 'sampleTable', {
+            tableFieldA: 'someValue'
+        });
+    });
 ```
-
 
 ### User-defined transactions
 
@@ -207,19 +213,17 @@ it as soon as the callback finishes. If any error is thrown inside
 this function, the transaction will be aborted.
 
 ```js
-const conn = antidoteSQL.connect(8087, "127.0.0.1")
+const conn = antidoteSQL.connect(8087, '127.0.0.1');
 
 antidoteSQL.runTransaction(conn, tx => {
-    return antidoteSQL.createTable(tx, "tableFoo", [
-            "fooId",
-            "fooA",
-            "fooB"
-    ]).then(_ => {
-        return antidoteSQL.createTable(tx, "tableBar", [
-            "barId",
-            "barA",
-            "barB"
-        ])
-    })
-})
+    return antidoteSQL
+        .createTable(tx, 'tableFoo', ['fooId', 'fooA', 'fooB'])
+        .then(_ => {
+            return antidoteSQL.createTable(tx, 'tableBar', [
+                'barId',
+                'barA',
+                'barB'
+            ]);
+        });
+});
 ```
