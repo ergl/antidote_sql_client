@@ -317,20 +317,79 @@ function internalSelect(remote, fields, table, predicate) {
     });
 }
 
+// Given a list of tables and a list of fields (in table.field syntax)
+// return a map { table: [fields], ... } with the appropiate fields
+// to query for
+function computeQueriedFields(tables, fields) {
+    const fieldMap = {};
+
+    if (fields[0] === '*') {
+        tables.forEach(t => (fieldMap[t] = '*'));
+        return fieldMap;
+    }
+
+    fields.forEach(field => {
+        const [table, ...rest] = field.split('.');
+        if (!tables.includes(table)) {
+            return;
+        }
+
+        // Just in case fields contain a dot
+        const reField = rest.join('.');
+        const oldFields = fieldMap[table];
+        if (oldFields === undefined) {
+            fieldMap[table] = [reField];
+        } else {
+            oldFields.push(reField);
+        }
+    });
+
+    return fieldMap;
+}
+
+function getQueriedFieldsForTable(table, usingMap) {
+    const fields = [];
+
+    usingMap.forEach(entry => {
+        const keys = Object.keys(entry);
+        if (keys.includes(table)) {
+            fields.push(entry[table]);
+        }
+    });
+
+    return fields;
+}
+
 // predicate: {
 // using: [ { A:field_a, B:field_b }, ... ]
 // -- interpreted as where A.field_a = B.field_b AND ...
 // [table]: { [table.field]: value (same as any select predicate)
 // }
-function internalJoin(remote, fields, tables, joinPredicate) {
+function internalJoin(remote, field, tables, joinPredicate) {
+    const fields = utils.arreturn(field);
+
     const validPredicate = validateJoinPredicate(tables, joinPredicate);
     const usingMap = validPredicate.using;
 
+    const perTableQueryFields = computeQueriedFields(tables, fields);
+
     // Get all tables and prefix them
-    // TODO: Don't fetch all fields, just the ones we need
     const gatherAll = tables.map(table => {
+        const willJoinOnFields = getQueriedFieldsForTable(table, usingMap);
+
+        let queryFields = perTableQueryFields[table];
+        if (queryFields === undefined) {
+            queryFields = willJoinOnFields;
+        } else if (queryFields !== '*') {
+            willJoinOnFields.forEach(f => {
+                if (!queryFields.includes(f)) {
+                    queryFields.push(f);
+                }
+            });
+        }
+
         const tablePredicate = validPredicate[table];
-        return select(remote, '*', table, tablePredicate).then(r => {
+        return select(remote, queryFields, table, tablePredicate).then(r => {
             // Put extra information for multi-way join
             if (tables.length >= 3) {
                 return { table: table, rows: prefixTableName(table, r) };
@@ -343,14 +402,15 @@ function internalJoin(remote, fields, tables, joinPredicate) {
     const f_rows = Promise.all(gatherAll);
 
     return f_rows.then(markedRows => {
-        const joined = multiInnerJoin(markedRows, usingMap);
+        const prefixedMap = prefixUsingMap(usingMap);
+        const joined = multiInnerJoin(markedRows, prefixedMap);
 
         if (joined.length === 0) {
             return joined;
         }
 
         let queriedFields;
-        if (fields === '*') {
+        if (field === '*') {
             // If asking for all, pick all the fields
             // from the first entry—it doesn't matter
             queriedFields = Object.keys(joined[0]);
@@ -380,6 +440,7 @@ function validateJoinPredicate(tables, predicate) {
 // For each entry, collect the keys, and make sure they match with the
 // given tables
 // The shape of an usingMap is:
+//
 // const using = [
 //     {
 //         tableA: 'fieldA',
@@ -394,7 +455,7 @@ function validateUsingMap(queriedTables, usingMap) {
 
     const keySet = new Set();
 
-    const transformed = usingMaps.map(entry => {
+    usingMaps.forEach(entry => {
         const entryKeys = Object.keys(entry);
         if (entryKeys.length != 2) {
             throw new Error(
@@ -410,12 +471,6 @@ function validateUsingMap(queriedTables, usingMap) {
                 );
             }
         });
-
-        return utils.mapO(entry, (key, value) => {
-            return {
-                [key]: prefixField(key, value)
-            };
-        });
     });
 
     for (let table of queriedTables) {
@@ -426,7 +481,17 @@ function validateUsingMap(queriedTables, usingMap) {
         }
     }
 
-    return transformed;
+    return usingMaps;
+}
+
+function prefixUsingMap(usingMap) {
+    return usingMap.map(entry => {
+        return utils.mapO(entry, (key, value) => {
+            return {
+                [key]: prefixField(key, value)
+            };
+        });
+    });
 }
 
 function validateJoinFields(tables, onField) {
