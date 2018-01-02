@@ -361,7 +361,7 @@ function joinCheck() {
         return antidoteSQL.runTransaction(db, tx => {
             return antidoteSQL
                 .select(tx, '*', ['tableB', 'tableA'], {
-                    using: ['reference', 'idA']
+                    using: { tableB: 'reference', tableA: 'idA' }
                 })
                 .then(utils.passThen(console.log));
         });
@@ -371,7 +371,7 @@ function joinCheck() {
         return antidoteSQL.runTransaction(db, tx => {
             return antidoteSQL
                 .select(tx, '*', ['tableB', 'tableA'], {
-                    using: ['reference', 'idA'],
+                    using: { tableB: 'reference', tableA: 'idA' },
                     tableB: {
                         content: ['foo', 'baz']
                     }
