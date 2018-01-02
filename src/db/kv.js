@@ -7,7 +7,12 @@ const orderedKeySet = require('./orderedKeySet');
 function createRemote(port, url, opts = { bucket: 'bucket' }) {
     const remote = antidote_client.connect(port, url);
     const bucket = opts.bucket || 'default-bucket';
-    return Object.assign(remote, { defaultBucket: bucket });
+    const timeoutMS = opts.timeoutMS || 10000;
+
+    remote.defaultBucket = bucket;
+    remote.connection.requestTimeoutMs = timeoutMS;
+
+    return remote;
 }
 
 function closeRemote(remote) {
