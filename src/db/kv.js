@@ -244,18 +244,18 @@ function condPut(remote, key, value, expected) {
             const exp = utils.arreturn(expected);
             if (exp.length !== vs.length) {
                 throw new Error(
-                    `Conditional put failed, expected ${expected}, got ${
-                        vs
-                    } from ${key.map(keyEncoding.toString)}`
+                    `Conditional put failed, expected ${expected}, got ${vs} from ${key.map(
+                        keyEncoding.toString
+                    )}`
                 );
             }
 
             const equals = cond_match(vs, exp);
             if (!equals) {
                 throw new Error(
-                    `Conditional put failed, expected ${expected}, got ${
-                        vs
-                    } from ${key.map(keyEncoding.toString)}`
+                    `Conditional put failed, expected ${expected}, got ${vs} from ${key.map(
+                        keyEncoding.toString
+                    )}`
                 );
             }
 
