@@ -45,25 +45,38 @@ function internalInsert(remote, table, mapping) {
         .getPKField(remote, table)
         .then(pk_field => {
             const field_names = Object.keys(mapping);
-            return field_names.concat(pk_field);
+            return {
+                pkField: pk_field,
+                resultingSchema: field_names.concat(pk_field)
+            };
         })
-        .then(insertFields => {
+        .then(result => {
+            const resultingSchema = result.resultingSchema;
             // Inserts must specify every field, don't allow nulls by default
             // Easily solvable by inserting a bottom value.
             // TODO: Add bottom value for nullable fields
             return schema
-                .validateSchema(remote, table, insertFields)
+                .validateSchema(remote, table, resultingSchema)
                 .then(r => {
                     if (!r) throw new Error('Invalid schema');
-                    return fkViolations.checkOutFKs(remote, table, mapping);
+                    return fkViolations
+                        .checkOutFKs(remote, table, mapping)
+                        .then(violation => {
+                            result.validSchema = violation;
+                            return result;
+                        });
                 });
         })
-        .then(valid => {
-            if (!valid) throw new Error('FK constraint failed');
-            return pks.fetchAddPrimaryKey(remote, table);
+        .then(result => {
+            if (!result.validSchema) throw new Error('FK constraint failed');
+            return pks.fetchAddPrimaryKey(remote, table).then(newPkValue => {
+                result.pkValue = newPkValue;
+                return result;
+            });
         })
-        .then(pk_value => {
-            return rawInsert(remote, table, pk_value, mapping);
+        .then(result => {
+            const { pkField, pkValue } = result;
+            return rawInsert(remote, table, pkField, pkValue, mapping);
         });
 }
 
@@ -75,7 +88,7 @@ function internalInsert(remote, table, mapping) {
 //
 // This function is unsafe. It MUST be ran inside a transaction.
 //
-function rawInsert(remote, table, pkValue, mapping) {
+function rawInsert(remote, table, pkField, pkValue, mapping) {
     const fieldNames = Object.keys(mapping);
     const pkKey = keyEncoding.spk(table, pkValue);
     const fieldKeys = fieldNames.map(f => keyEncoding.field(table, pkValue, f));
@@ -89,7 +102,8 @@ function rawInsert(remote, table, pkValue, mapping) {
         .then(_ => indices.updateIndices(remote, table, pkValue, mapping))
         .then(_ => {
             return indices.updateUniqueIndices(remote, table, pkValue, mapping);
-        });
+        })
+        .then(_ => ({ generatedKeyValue: { pkField, pkValue } }));
 }
 
 module.exports = {

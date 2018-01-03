@@ -103,6 +103,7 @@ function internalUpdate(remote, table, mapping, predicate) {
                         return insert.__unsafeRawInsert(
                             remote,
                             table,
+                            pkField,
                             pkValue,
                             mapping
                         );
